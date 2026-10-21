@@ -378,6 +378,8 @@ G, A, R = Status.GREEN, Status.AMBER, Status.RED
         ((R, R, G, G, G), Risk.HIGH),
         ((R, A, A, R, A), Risk.HIGH),
         ((G, G, G, G, R), Risk.HIGH),
+        ((R, G, G, G, G), Risk.HIGH),
+        ((R, A, A, A, G), Risk.HIGH),
     ],
 )
 def test_verdict_level(statuses, level):
@@ -389,6 +391,29 @@ def test_verdict_high_when_archived_even_if_only_one_red():
 
     assert result.level is Risk.HIGH
     assert "archived" in result.reason.lower()
+
+
+@pytest.mark.parametrize(
+    ("statuses", "archived"),
+    [
+        ((R, G, G, G, G), False),
+        ((G, G, G, G, R), False),
+        ((R, R, G, G, G), False),
+        ((R, G, G, G, G), True),
+    ],
+)
+def test_verdict_high_reason_says_you_would_maintain_it_yourself(statuses, archived):
+    result = verdict(signals(*statuses), archived=archived)
+
+    assert result.level is Risk.HIGH
+    assert "maintain it yourself" in result.reason
+    assert "don't use" not in result.reason.lower()
+
+
+def test_verdict_high_reason_names_stalled_liveness():
+    result = verdict(signals(R, G, G, G, G), archived=False)
+
+    assert "liveness" in result.reason
 
 
 def test_verdict_high_reason_names_missing_license():

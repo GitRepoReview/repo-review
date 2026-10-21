@@ -186,20 +186,28 @@ def license_signal(repo: dict) -> SignalResult:
 
 
 def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
-    """Traffic light from signal statuses; archived or no license is always high."""
+    """Traffic light from signal statuses.
+
+    High means you would end up maintaining it yourself: archived, no license,
+    no recent commits (liveness red) or several red signals.
+    """
     reds = [s.id for s in signals if s.status is Status.RED]
     ambers = [s.id for s in signals if s.status is Status.AMBER]
     no_license = "license" in reds
+    stalled = "liveness" in reds and not archived
 
-    if archived or no_license or len(reds) >= t.VERDICT_HIGH_RED_COUNT:
+    if archived or no_license or stalled or len(reds) >= t.VERDICT_HIGH_RED_COUNT:
         causes = []
         if archived:
             causes.append("the repository is archived")
         if no_license:
             causes.append("it has no license")
+        if stalled:
+            causes.append("liveness is red, nobody is committing")
         if len(reds) >= t.VERDICT_HIGH_RED_COUNT:
             causes.append(f"red signals: {', '.join(reds)}")
-        return Verdict(Risk.HIGH, f"High risk: {'; '.join(causes)}.")
+        reason = f"High risk, you'd likely maintain it yourself: {'; '.join(causes)}."
+        return Verdict(Risk.HIGH, reason)
     if reds or len(ambers) >= t.VERDICT_MEDIUM_AMBER_COUNT:
         flagged = ", ".join(reds + ambers)
         return Verdict(Risk.MEDIUM, f"Medium risk: needs a closer look at {flagged}.")

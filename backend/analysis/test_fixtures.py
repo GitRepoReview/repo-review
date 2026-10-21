@@ -71,10 +71,9 @@ def test_archived_repo_atom_atom_is_high_risk():
     assert "archived" in result.reason
 
 
-def test_deprecated_but_not_archived_request_request_is_medium_risk():
-    # Predicted archived/high, but GitHub does not flag it as archived. It has
-    # had no commits for years and still only scores one red: the traffic light
-    # is medium, which is the soft spot of the "count the reds" rule.
+def test_deprecated_but_not_archived_request_request_is_high_risk():
+    # GitHub does not flag it as archived, but nothing has been committed for
+    # years: red liveness alone is high (D-77).
     signals, result = report("request_request")
 
     assert statuses(signals) == {
@@ -84,7 +83,7 @@ def test_deprecated_but_not_archived_request_request_is_medium_risk():
         "releases": "amber",
         "license": "green",
     }
-    assert result.level is Risk.MEDIUM
+    assert result.level is Risk.HIGH
 
 
 def test_single_maintainer_repo_sindresorhus_p_map_is_high_risk():
