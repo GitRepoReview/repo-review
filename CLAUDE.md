@@ -32,17 +32,31 @@ All thresholds live in one file: `backend/analysis/thresholds.py`.
 ## Rate limit (core part of the task)
 No GitHub token by default (60 req/h per server IP). `GITHUB_TOKEN` env is an emergency escape only.
 Note: ETag/304 does NOT save quota without a token — don't rely on it.
-Protection, in order: cache 24h on disk (SQLite) → stale-while-revalidate → single-flight per repo
-→ refuse to start a new analysis (not the app) if `X-RateLimit-Remaining` < 4 (429 with `reset_at`, or stale data) → pre-warm demo repos
+Protection, in order: cache on disk (SQLite) → stale-if-limited → refuse to start a new analysis (not the app)
+if `GET /rate_limit` (free, doesn't count) shows `remaining` < 4 (429 with `reset_at`, or stale data) → pre-warm demo repos
 → UI shows data source, freshness, remaining quota. ~4 requests per uncached analysis.
+- Fresh = bundle `fetched_at` < 24h. Stale entries are refreshed synchronously if quota allows, else served with
+  `meta.stale=true`. No background refresh.
+- No single-flight: single-user demo. Two concurrent requests at `remaining`=4 may both pass the check and spend 8
+  instead of 4; accepted. The frontend button is disabled while a request is in flight.
+- Cache = Django `DatabaseCache` on SQLite, `createcachetable` at startup (needed for pre-warm, #5).
+  #3 tests are respx-only, no network; cache warm-up is #5.
+- Cache entries live 30 days so stale data stays readable; freshness is judged from `fetched_at`, not the cache timeout.
+- Cache the raw bundle `{repo, commits, issues, releases, fetched_at}` (never a partial one); compute the report per request.
+  Key = validated `owner/repo`, lowercased. 404s cached 1h. Renamed repos get duplicate entries (accepted).
+- Request params match the recorded fixtures: commits/issues/repo as in `github_client.py`, releases `per_page=10`
+  (not 100; don't "fix" it).
+- GitHub limit exhausted = (403 or 429) AND `x-ratelimit-remaining` == 0. Other 403/429 and unexpected 3xx → 502.
 
 ## Architecture
 Browser → Django only; only the backend calls GitHub.
 - `backend/analysis/github_client.py` — httpx, timeouts, `X-RateLimit-*`, typed errors (`RepoNotFound`, `RateLimited`, `UpstreamError`)
 - `backend/analysis/signals.py` — pure functions `raw JSON → SignalResult(status, summary, evidence)`; no HTTP here
-- `backend/analysis/views.py` — `GET /api/repos/{owner}/{repo}/report` → 200 / 404 / 429 / 502
+- `backend/analysis/views.py` — `GET /api/repos/{owner}/{repo}/report` → 200 / 400 / 404 / 422 / 429 / 502
 - `GET /api/health` → `{"status":"ok"}`; never calls GitHub.
-- Response: `{ repo, verdict, signals: [{id, status, summary, evidence}], context, meta: {cached, fetched_at, rate_limit: {remaining, reset_at}} }`
+- Response: `{ repo, verdict, signals: [{id, status, summary, evidence}], context, meta: {cached, stale, fetched_at, rate_limit: {remaining, reset_at} | null} }`; `verdict: {level, reason}`; `repo` = `full_name` from GitHub.
+- Errors: `{error: {code, message, reset_at?}}`, code ∈ `invalid_repo` 400, `not_found` 404, `empty_repo` 422 (GitHub 409 on commits; cached 1h like `not_found`), `rate_limited` 429, `upstream_error` 502.
+  `rate_limit` is null when served from fresh cache (no GitHub call).
 - Cache: Django cache framework on SQLite/file. No Postgres, no Redis, no auth.
 - Frontend: Vite + React + TypeScript + Tailwind, one page: form → loading → report / error.
 
