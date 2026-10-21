@@ -57,6 +57,9 @@ def test_active_repo_pallets_flask_is_medium_risk():
     }
     evidence = signals["bus_factor"].evidence
     assert evidence["merge_commits"] == 36
+    assert evidence["sample_commits"] == 94
+    assert evidence["sample_oldest"] == "2025-11-17T16:49:53Z"
+    assert evidence["sample_newest"] == "2026-10-07T14:02:54Z"
     assert evidence["top_author_share_pct"] == 87.9
     assert "concentrated" in signals["bus_factor"].summary
     assert result.level is Risk.MEDIUM

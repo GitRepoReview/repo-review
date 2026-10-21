@@ -187,6 +187,30 @@ def test_bus_factor_falls_back_to_commit_email_when_no_github_login():
     assert result.status is Status.RED
 
 
+def test_bus_factor_evidence_reports_the_sample_window():
+    commits = [
+        commit("alice", days=5),
+        commit("bob", days=30),
+        commit("alice", days=2),
+        commit("dependabot[bot]", days=60),
+        commit("alice", days=9, parents=2),
+    ]
+
+    result = bus_factor(commits)
+
+    assert result.evidence["sample_commits"] == 5
+    assert result.evidence["sample_oldest"] == ago(60)
+    assert result.evidence["sample_newest"] == ago(2)
+
+
+def test_bus_factor_sample_window_is_empty_without_commits():
+    result = bus_factor([])
+
+    assert result.evidence["sample_commits"] == 0
+    assert result.evidence["sample_oldest"] is None
+    assert result.evidence["sample_newest"] is None
+
+
 def test_bus_factor_treats_null_login_like_missing_author():
     commits = [commit(None, email="ghost@example.com") for _ in range(10)]
     for c in commits:
@@ -499,6 +523,7 @@ def test_license_missing_is_red(repo):
     result = license_signal(repo)
 
     assert result.status is Status.RED
+    assert result.summary == "GitHub found no license file"
     assert result.evidence["spdx_id"] is None
 
 

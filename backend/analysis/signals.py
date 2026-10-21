@@ -82,12 +82,16 @@ def bus_factor(commits: list[dict]) -> SignalResult:
     Merge commits carry the merger's name, not an author's work, so they are
     left out of authorship.
     """
+    dates = [c["commit"]["committer"]["date"] for c in commits]
     authored = [c for c in commits if len(c.get("parents", ())) <= 1]
     humans = [c for c in authored if not _is_bot(c)]
     evidence: dict[str, Any] = {
         "human_commits": len(humans),
         "bot_commits": len(authored) - len(humans),
         "merge_commits": len(commits) - len(authored),
+        "sample_commits": len(commits),
+        "sample_oldest": min(dates, key=_parse, default=None),
+        "sample_newest": max(dates, key=_parse, default=None),
         "top_author": None,
         "top_author_share_pct": None,
     }
@@ -205,7 +209,9 @@ def license_signal(repo: dict) -> SignalResult:
     evidence = {"spdx_id": spdx_id}
 
     if spdx_id is None:
-        return SignalResult("license", Status.RED, "No license declared.", evidence)
+        return SignalResult(
+            "license", Status.RED, "GitHub found no license file", evidence
+        )
     if spdx_id in t.PERMISSIVE_LICENSES:
         return SignalResult(
             "license", Status.GREEN, f"{spdx_id} (permissive).", evidence
