@@ -2,7 +2,7 @@
 ## Notes
 
 - **Test fixtures.** `backend/analysis/fixtures/*.json` are raw GitHub API
-  responses, recorded once. Each file stores `recorded_at`, which the smoke
+  responses, recorded once. Each file stores `fetched_at`, which the smoke
   tests use as "now". Author emails are replaced by stable hashes (the same
   address always gives the same hash).
 - **Responsiveness limitation.** The median close time counts every issue

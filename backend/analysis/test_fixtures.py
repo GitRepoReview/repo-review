@@ -1,6 +1,6 @@
 """Smoke tests: real recorded GitHub responses through every signal.
 
-Each fixture holds the four responses plus `recorded_at`, which is used as `now`
+Each fixture holds the four responses plus `fetched_at`, which is used as `now`
 so the tests do not age. Expectations were written before recording; where the
 real data disagreed, the test pins what the rules actually give and says so.
 """
@@ -26,7 +26,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 def report(name):
     data = json.loads((FIXTURES / f"{name}.json").read_text())
-    now = datetime.fromisoformat(data["recorded_at"])
+    now = datetime.fromisoformat(data["fetched_at"])
     repo, commits = data["repo"], data["commits"]
     signals = [
         liveness(repo, commits, now),
