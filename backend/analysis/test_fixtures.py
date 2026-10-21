@@ -60,6 +60,7 @@ def test_active_repo_pallets_flask_is_medium_risk():
     assert evidence["top_author_share_pct"] == 87.9
     assert "concentrated" in signals["bus_factor"].summary
     assert result.level is Risk.MEDIUM
+    assert result.reason == "Medium risk: red signals: bus_factor."
 
 
 def test_archived_repo_atom_atom_is_high_risk():
@@ -73,7 +74,9 @@ def test_archived_repo_atom_atom_is_high_risk():
         "license": "green",
     }
     assert result.level is Risk.HIGH
-    assert "archived" in result.reason
+    assert "archived by the owner — you'd maintain it yourself" in result.reason
+    assert "also red: responsiveness, releases" in result.reason
+    assert "not enough data for bus_factor" in result.reason
 
 
 def test_deprecated_but_not_archived_request_request_is_high_risk():
@@ -89,6 +92,12 @@ def test_deprecated_but_not_archived_request_request_is_high_risk():
         "license": "green",
     }
     assert result.level is Risk.HIGH
+    assert (
+        "no commits in 12 months — you'd likely maintain it yourself" in result.reason
+    )
+    for id in ("bus_factor", "responsiveness", "releases"):
+        assert signals[id].evidence["reason"] == "insufficient_data"
+        assert f"not enough data for {id}" in result.reason
 
 
 def test_single_maintainer_repo_sindresorhus_p_map_is_high_risk():
@@ -104,6 +113,7 @@ def test_single_maintainer_repo_sindresorhus_p_map_is_high_risk():
         "license": "green",
     }
     assert result.level is Risk.HIGH
+    assert result.reason == "High risk: red signals: bus_factor, responsiveness."
 
 
 @pytest.mark.parametrize(

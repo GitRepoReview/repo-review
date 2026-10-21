@@ -36,6 +36,9 @@ class Verdict:
     reason: str
 
 
+INSUFFICIENT_DATA = "insufficient_data"
+
+
 def _parse(timestamp: str) -> datetime:
     return datetime.fromisoformat(timestamp)
 
@@ -90,6 +93,7 @@ def bus_factor(commits: list[dict]) -> SignalResult:
     }
 
     if len(humans) < t.BUS_FACTOR_MIN_COMMITS:
+        evidence["reason"] = INSUFFICIENT_DATA
         return SignalResult(
             "bus_factor",
             Status.AMBER,
@@ -138,6 +142,7 @@ def responsiveness(issues: list[dict], repo: dict, now: datetime) -> SignalResul
     }
 
     if not repo.get("has_issues", True):
+        evidence["reason"] = INSUFFICIENT_DATA
         return SignalResult(
             "responsiveness",
             Status.AMBER,
@@ -152,6 +157,7 @@ def responsiveness(issues: list[dict], repo: dict, now: datetime) -> SignalResul
             evidence,
         )
     if len(durations) < t.RESPONSIVENESS_MIN_CLOSED:
+        evidence["reason"] = INSUFFICIENT_DATA
         return SignalResult(
             "responsiveness",
             Status.AMBER,
@@ -177,7 +183,11 @@ def releases(releases_json: list[dict], now: datetime) -> SignalResult:
             "releases",
             Status.AMBER,
             "No GitHub releases.",
-            {"days_since_last_release": None, "tag_name": None},
+            {
+                "days_since_last_release": None,
+                "tag_name": None,
+                "reason": INSUFFICIENT_DATA,
+            },
         )
     days = (now - _parse(latest["published_at"])).days
     status = _by_age(days, t.RELEASES_GREEN_DAYS, t.RELEASES_AMBER_DAYS)
@@ -210,32 +220,52 @@ def license_signal(repo: dict) -> SignalResult:
     return SignalResult("license", Status.AMBER, summary, evidence)
 
 
-def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
-    """Traffic light from signal statuses.
+STALLED = "no commits in 12 months — you'd likely maintain it yourself"
+ARCHIVED = "archived by the owner — you'd maintain it yourself"
+NO_LICENSE = (
+    "GitHub found no license file — you may have no right to use it; check manually"
+)
 
-    High means you would end up maintaining it yourself: archived, no license,
-    no recent commits (liveness red) or several red signals.
+
+def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
+    """Traffic light from signal statuses; the reason names every cause once.
+
+    High: archived, no recent commits, no license, or two reds. Medium: one red,
+    or two ambers, not counting an amber license or ambers that only mean
+    "not enough data". Low: anything else.
     """
     reds = [s.id for s in signals if s.status is Status.RED]
     ambers = [s.id for s in signals if s.status is Status.AMBER]
-    no_license = "license" in reds
+    unsure = [s.id for s in signals if s.evidence.get("reason") == INSUFFICIENT_DATA]
+    counted = [i for i in ambers if i != "license" and i not in unsure]
     stalled = "liveness" in reds and not archived
+    no_license = "license" in reds
 
-    if archived or no_license or stalled or len(reds) >= t.VERDICT_HIGH_RED_COUNT:
-        causes = []
-        if archived:
-            causes.append("the repository is archived")
-        if no_license:
-            causes.append("it has no license")
-        if stalled:
-            causes.append("liveness is red, nobody is committing")
-        if len(reds) >= t.VERDICT_HIGH_RED_COUNT:
-            causes.append(f"red signals: {', '.join(reds)}")
-        reason = f"High risk, you'd likely maintain it yourself: {'; '.join(causes)}."
-        return Verdict(Risk.HIGH, reason)
-    if reds or len(ambers) >= t.VERDICT_MEDIUM_AMBER_COUNT:
-        flagged = ", ".join(reds + ambers)
-        return Verdict(Risk.MEDIUM, f"Medium risk: needs a closer look at {flagged}.")
-    if ambers:
-        return Verdict(Risk.LOW, f"Low risk: only {ambers[0]} is a minor concern.")
-    return Verdict(Risk.LOW, "Low risk: every signal is healthy.")
+    if archived or stalled or no_license or len(reds) >= t.VERDICT_HIGH_RED_COUNT:
+        level = Risk.HIGH
+    elif reds or len(counted) >= t.VERDICT_MEDIUM_AMBER_COUNT:
+        level = Risk.MEDIUM
+    else:
+        level = Risk.LOW
+
+    causes = []
+    if archived:
+        causes.append(ARCHIVED)
+    if stalled:
+        causes.append(STALLED)
+    if no_license:
+        causes.append(NO_LICENSE)
+    named = ["liveness"] * (archived or stalled) + ["license"] * no_license
+    other_reds = [i for i in reds if i not in named]
+    if other_reds and (level is not Risk.HIGH or len(reds) >= t.VERDICT_HIGH_RED_COUNT):
+        label = "also red" if causes else "red signals"
+        causes.append(f"{label}: {', '.join(other_reds)}")
+    if level is Risk.MEDIUM and len(counted) >= t.VERDICT_MEDIUM_AMBER_COUNT:
+        causes.append(f"amber signals: {', '.join(counted)}")
+    if level is Risk.LOW and len(counted) == 1:
+        causes.append(f"only {counted[0]} is a minor concern")
+
+    notes = ["check the license"] if "license" in ambers else []
+    notes += [f"not enough data for {i}" for i in unsure]
+    parts = causes + notes or ["every signal is healthy"]
+    return Verdict(level, f"{level.value.capitalize()} risk: {'; '.join(parts)}.")

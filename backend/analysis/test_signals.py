@@ -116,6 +116,18 @@ def test_bus_factor_amber_when_fewer_than_ten_human_commits():
     assert result.evidence["human_commits"] == 9
 
 
+def test_bus_factor_too_little_activity_is_insufficient_data():
+    result = bus_factor(commits_by({"alice": 9}))
+
+    assert result.evidence["reason"] == "insufficient_data"
+
+
+def test_bus_factor_enough_commits_has_no_insufficient_data_reason():
+    result = bus_factor(commits_by({"alice": 5, "bob": 5}))
+
+    assert "reason" not in result.evidence
+
+
 def test_bus_factor_ten_human_commits_is_enough_to_judge():
     result = bus_factor(commits_by({"alice": 10}))
 
@@ -306,6 +318,39 @@ def test_responsiveness_red_when_nothing_closed_and_issues_enabled():
     assert result.status is Status.RED
 
 
+@pytest.mark.parametrize(
+    ("issues", "repo"),
+    [
+        ([], {"has_issues": True, "open_issues_count": 0}),
+        ([closed_issue(open_days=1)], {"open_issues_count": 5}),
+        (
+            [closed_issue(open_days=1), closed_issue(open_days=1)],
+            {"open_issues_count": 5},
+        ),
+        ([], {"has_issues": False, "open_issues_count": 0}),
+    ],
+    ids=["nothing-closed-nothing-open", "one-closed", "two-closed", "issues-disabled"],
+)
+def test_responsiveness_without_enough_data_is_insufficient_data(issues, repo):
+    result = responsiveness(issues, repo, NOW)
+
+    assert result.status is Status.AMBER
+    assert result.evidence["reason"] == "insufficient_data"
+
+
+def test_responsiveness_nothing_closed_with_open_issues_is_red_not_insufficient():
+    result = responsiveness([], {"has_issues": True, "open_issues_count": 3}, NOW)
+
+    assert result.status is Status.RED
+    assert "reason" not in result.evidence
+
+
+def test_responsiveness_with_enough_closed_issues_has_no_reason():
+    result = responsiveness(three_closed(10), {"open_issues_count": 5}, NOW)
+
+    assert "reason" not in result.evidence
+
+
 def test_responsiveness_amber_when_nothing_closed_and_nothing_open():
     result = responsiveness([], {"open_issues_count": 0}, NOW)
 
@@ -381,6 +426,11 @@ def test_releases_amber_when_no_published_releases(payload):
     assert result.status is Status.AMBER
     assert "no github releases" in result.summary.lower()
     assert result.evidence["days_since_last_release"] is None
+    assert result.evidence["reason"] == "insufficient_data"
+
+
+def test_releases_with_a_release_has_no_insufficient_data_reason():
+    assert "reason" not in releases([release(10)], NOW).evidence
 
 
 # --- license ----------------------------------------------------------------
@@ -457,9 +507,14 @@ def test_license_missing_is_red(repo):
 IDS = ["liveness", "bus_factor", "responsiveness", "releases", "license"]
 
 
-def signals(*statuses):
+def signals(*statuses, insufficient=()):
     return [
-        SignalResult(id=id, status=status, summary="", evidence={})
+        SignalResult(
+            id=id,
+            status=status,
+            summary="",
+            evidence={"reason": "insufficient_data"} if id in insufficient else {},
+        )
         for id, status in zip(IDS, statuses, strict=True)
     ]
 
@@ -493,33 +548,80 @@ def test_verdict_high_when_archived_even_if_only_one_red():
     assert "archived" in result.reason.lower()
 
 
-@pytest.mark.parametrize(
-    ("statuses", "archived"),
-    [
-        ((R, G, G, G, G), False),
-        ((G, G, G, G, R), False),
-        ((R, R, G, G, G), False),
-        ((R, G, G, G, G), True),
-    ],
-)
-def test_verdict_high_reason_says_you_would_maintain_it_yourself(statuses, archived):
-    result = verdict(signals(*statuses), archived=archived)
-
-    assert result.level is Risk.HIGH
-    assert "maintain it yourself" in result.reason
-    assert "don't use" not in result.reason.lower()
-
-
-def test_verdict_high_reason_names_stalled_liveness():
+def test_verdict_stalled_liveness_reason_says_no_commits_in_12_months():
     result = verdict(signals(R, G, G, G, G), archived=False)
 
-    assert "liveness" in result.reason
+    assert result.level is Risk.HIGH
+    assert (
+        "no commits in 12 months — you'd likely maintain it yourself" in result.reason
+    )
 
 
-def test_verdict_high_reason_names_missing_license():
+def test_verdict_archived_reason_says_archived_by_the_owner():
+    result = verdict(signals(R, G, G, G, G), archived=True)
+
+    assert result.level is Risk.HIGH
+    assert "archived by the owner — you'd maintain it yourself" in result.reason
+    assert "no commits" not in result.reason
+
+
+def test_verdict_no_license_reason_warns_about_the_right_to_use():
     result = verdict(signals(G, G, G, G, R), archived=False)
 
-    assert "license" in result.reason
+    assert result.level is Risk.HIGH
+    assert (
+        "GitHub found no license file — you may have no right to use it; check manually"
+    ) in result.reason
+    assert "maintain it yourself" not in result.reason
+
+
+def test_verdict_names_each_cause_once():
+    result = verdict(signals(R, G, G, R, R), archived=False)
+
+    assert result.reason.count("no commits in 12 months") == 1
+    assert result.reason.count("no license file") == 1
+    assert result.reason.count("releases") == 1
+    assert "liveness" not in result.reason
+
+
+@pytest.mark.parametrize(
+    ("statuses", "insufficient", "level"),
+    [
+        ((G, A, G, G, A), (), Risk.LOW),  # amber license does not count
+        ((G, A, A, G, G), (), Risk.MEDIUM),
+        ((G, A, A, G, G), ("bus_factor",), Risk.LOW),
+        ((G, A, A, G, G), ("bus_factor", "responsiveness"), Risk.LOW),
+        ((G, A, A, A, A), ("bus_factor",), Risk.MEDIUM),  # responsiveness + releases
+        ((G, A, G, A, A), ("releases",), Risk.LOW),
+        ((G, G, G, R, A), ("bus_factor",), Risk.MEDIUM),  # one red still counts
+    ],
+)
+def test_verdict_amber_license_and_insufficient_data_do_not_count(
+    statuses, insufficient, level
+):
+    result = verdict(signals(*statuses, insufficient=insufficient), archived=False)
+
+    assert result.level is level
+
+
+def test_verdict_mentions_amber_license():
+    result = verdict(signals(G, G, G, G, A), archived=False)
+
+    assert result.level is Risk.LOW
+    assert "check the license" in result.reason
+
+
+def test_verdict_mentions_each_insufficient_data_signal():
+    result = verdict(
+        signals(
+            G, A, A, A, G, insufficient=("bus_factor", "responsiveness", "releases")
+        ),
+        archived=False,
+    )
+
+    assert "not enough data for bus_factor" in result.reason
+    assert "not enough data for responsiveness" in result.reason
+    assert "not enough data for releases" in result.reason
 
 
 def test_verdict_reason_names_the_signals_that_drove_it():
