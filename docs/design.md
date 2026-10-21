@@ -15,7 +15,7 @@ The memorable element is the **3-segment risk meter** in every tile: risk is sho
 segments are filled, not only by colour. Everything else is quiet.
 
 ## Tokens
-Colour — light theme only, no gradients, no shadows:
+Colour — light theme only, no gradients (except the verdict panel tint), no shadows (except the search focus ring):
 | name | hex | use |
 |---|---|---|
 | paper | #F6F7F9 | page background |
@@ -27,6 +27,7 @@ Colour — light theme only, no gradients, no shadows:
 | watch | #B7791F | filled segments when Watch, "Medium risk" |
 | risk | #B3261E | filled segments when Risk, "High risk" |
 | unknown | #8A94A3 | hatch for Not enough data |
+| accent | #1F4FBF | the one brand colour: brand name, links, primary button, focus border. White on it 7.17:1; on `paper` 6.69:1. Hover for the button #1C49AF |
 
 All text/background pairs must meet WCAG AA (check `watch` on white for text; if it fails, use it
 only for segments and keep the status word in ink).
@@ -50,9 +51,15 @@ The meter has `role="img"` and an `aria-label` equal to the status word.
 
 ## Layout (single column, left-aligned, max-width 760px)
 ```
-[ owner/repo or GitHub link ............................ ] [ Check repo ]
-Paste a GitHub repository to see whether anyone will keep maintaining it.   <- empty state only
-Try: pallets/flask   request/request   sindresorhus/p-map                    <- empty state only
+Hero, empty state (full-bleed white band, 1px rule below, 85vh, centred):
+RepoReview                                                            <- 16/600, accent
+Will we regret depending on this?                                     <- 48/600 ink, max 30ch
+Checks who will maintain an open-source dependency two years from now.   <- 18 muted
+[ owner/repo or GitHub link ..................... [ Review ] ]        <- one 64px container, max 680, grey border
+▬▬▬▬▬▬▬▬▬▬▬▬ ▬▬▬▬▬▬▬▬▬▬▬▬ ▬▬▬▬▬▬▬▬▬▬▬▬                               <- 3px ok/watch/risk, decorative
+Try: pallets/flask   request/request   sindresorhus/p-map
+
+With a report: a 64px white bar with a 1px rule, RepoReview left, the same field (44px) right.
 
 GitRepoReview/repo-review              View on GitHub  Homepage   <- report header, no border/background:
 A small tool that checks maintenance.                                  Plex Mono 20 ink; links 14 underlined
@@ -68,8 +75,8 @@ Checked 20 minutes ago, from cache.                         <- 14 muted
 ┌ [icon] Last commit ──────────┐ ┌ [icon] One author ──────────┐
 │ ■□□ Healthy                   │ │ ■■■ Risk                     │
 │ Last commit 0 days ago.       │ │ ValentynShtanko wrote 100%   │
-│ ▸ Show evidence               │ │ of 19 human commits.         │
-└───────────────────────────────┘ │ ▸ Show evidence              │
+│                               │ │ of 19 human commits.         │
+└───────────────────────────────┘ └──────────────────────────────┘
 ┌ [icon] Issue response ───────┐ └──────────────────────────────┘
 │ ╱╱╱ Not enough data           │ ┌ [icon] Releases ────────────┐
 │ Only 2 issues closed in 90 d. │ │ ╱╱╱ Not enough data          │
@@ -84,7 +91,12 @@ The thresholds are heuristics we chose, not research. Read them, or disagree, in
 ```
 Grid: two columns from 640px, one column below. Tile order fixed: Last commit, One author,
 Issue response, Releases, License (full width). Tile body = `summary` from the API as-is.
-"Show evidence" = native `<details>` with a `<dl>` of evidence keys and values, keys as-is.
+Evidence: one toggle above the tiles, right-aligned: a 36px button, 1px `rule` border, `surface` fill, radius 6, 14/600 ink label and a muted chevron (own SVG, points down closed, up open; hover border `unknown`) ("Show evidence" / "Hide evidence", `aria-expanded`,
+`aria-controls` the five blocks), opens or closes every tile's block at once. State lives in the report
+component and resets on a new report. A block is a `paper` panel (radius 4, 12px 14px) with a two-column
+`<dl>`: label 13 muted, value 14 ink tabular-nums right-aligned (long values wrap anywhere, left-aligned),
+1px `rule` between rows. Labels and formats come from one map in `format.ts`; `reason` is never shown,
+null is "—", unknown keys become sentence case.
 
 ## Revisions after screenshot review
 - Tiles are equal height per row. From 640px each tile is a CSS subgrid spanning five rows
@@ -95,6 +107,27 @@ Issue response, Releases, License (full width). Tile body = `summary` from the A
   description, seven facts, and a one-line note that popularity is not part of the verdict.
   The verdict panel keeps only level, reason and freshness. The separate "About this repo" block
   and the one-line context string are gone.
+- Hero (light, supersedes the dark band and D-206): a full-bleed white band with a 1px `rule`
+  below holds brand (accent), h1 (48px, 34px at 375px, max 30ch), subline 18px muted, search,
+  a decorative `aria-hidden` strip (ok / watch / risk, 3px segments, gap 4px, 8px under the form)
+  and examples. Empty state is 85vh (75vh at 375px), content centred.
+  Search is one 64px container (max 680px, radius 10px, 1px `unknown` border (3.07:1 on white, the minimum for a control edge)) with the button inside on
+  the right (48px, accent, white text, 8px inset; hover darker; disabled opacity .6). Focus: border
+  turns accent plus a 3px ring rgba(31,79,191,.15), the only shadow, because it answers focus.
+  Placeholder is `unknown` #8A94A3 (3.07:1 on white, below AA; the field has a hidden label).
+- Once a report has been shown the band shrinks to a 64px bar: brand (link to "/") left, field
+  (44px, button 36px inset 4px) right, two rows at 375px; h1 stays for screen readers only,
+  subline, strip and examples are hidden. No transition. Errors and waiting before the first
+  report keep the full hero without the min-height. The idle "Paste a GitHub repository…" line
+  is dropped, the hero says it.
+- Links in the report ("View on GitHub", "Homepage", thresholds.py) are accent and underlined.
+- Button copy is "Review", busy state "Reviewing…" (was "Check repo" / "Checking…").
+- Evidence is one toggle, not five `<details>`: rows grow together in the subgrid, so neighbours stay
+  aligned. Raw keys (`days_since_last_commit`) became human labels and formats (see Layout).
+- The report bar is sticky (`top: 0`, above content, white, 1px `rule` always, no shadow, no
+  appear animation); `html { scroll-padding-top }` equals its height so focus and anchors are not
+  hidden. At 375px it is one row of ~56px: the brand text is visually hidden (still a link for
+  screen readers) and the field takes the full width. The empty-state hero is not sticky.
 
 ## Icons (5, own inline SVG)
 Monochrome, `currentColor` = muted, 1.5px stroke, 20px, `aria-hidden="true"`, no fill colours, no library.
@@ -106,7 +139,7 @@ Monochrome, `currentColor` = muted, 1.5px stroke, 20px, `aria-hidden="true"`, no
 Icons sit before the tile name and never carry status. **First thing to cut** if time runs out.
 
 ## States and copy
-- Loading: button reads "Checking…" and is disabled (D-103). No skeletons, no spinners.
+- Loading: button reads "Reviewing…" and is disabled (D-103); the panel says "Reviewing {owner}/{repo}…" (announced by the aria-live region); the tab title is "Reviewing {owner}/{repo}… | RepoReview". No skeletons, no spinners.
 - 400 (or client-side parse failure): "That doesn't look like owner/repo or a GitHub link."
 - 404: "No public repository at {owner}/{repo}. Check the spelling."
 - 422: "This repository has no commits yet, so there's nothing to judge."
@@ -118,10 +151,10 @@ Icons sit before the tile name and never carry status. **First thing to cut** if
 - The status/error region is `aria-live="polite"`. High risk is never shown without its reason.
 
 ## Motion
-None on load. Only user-triggered: the evidence `<details>` opens. Respect `prefers-reduced-motion`.
+None on load. Only user-triggered: the evidence toggle opens. Respect `prefers-reduced-motion`.
 
 ## Don't
-Shadows, gradients, a big-number hero, emoji, decorative illustrations, all-caps or eyebrow labels,
+Shadows (exception: the 3px focus ring on the search), gradients (exception: the verdict panel tone), a big-number hero, emoji, decorative illustrations, all-caps or eyebrow labels,
 middle-dot meta strings, "→" on buttons or links, numbered 01/02/03 markers, a dark-mode toggle,
 monospace for anything except `owner/repo`, colour as the only carrier of status,
 one word of a headline accented in another colour.

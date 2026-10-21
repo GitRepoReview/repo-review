@@ -10,6 +10,8 @@
 	--color-watch: #b7791f;
 	--color-risk: #b3261e;
 	--color-unknown: #8a94a3;
+	--color-accent: #1f4fbf;
+	--color-accent-dark: #1c49af;
 
 	--font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -25,6 +27,16 @@
 }
 
 @layer base {
+	/* The sticky report bar is 56px (+1px rule) at 375px, 64px (+1px) from 640px. */
+	html {
+		scroll-padding-top: 57px;
+	}
+	@media (min-width: 640px) {
+		html {
+			scroll-padding-top: 65px;
+		}
+	}
+
 	body {
 		background: var(--color-paper);
 		color: var(--color-ink);

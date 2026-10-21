@@ -23,14 +23,14 @@ type State =
 
 function Examples({ onPick }: { onPick: (slug: string) => void }) {
 	return (
-		<p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-small text-muted">
+		<p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-small text-muted">
 			Try:
 			{EXAMPLES.map((slug) => (
 				<button
 					key={slug}
 					type="button"
 					onClick={() => onPick(slug)}
-					className="cursor-pointer rounded-[4px] text-ink underline underline-offset-2"
+					className="cursor-pointer rounded-[4px] underline underline-offset-2 hover:text-accent"
 				>
 					{slug}
 				</button>
@@ -80,7 +80,7 @@ function pageTitle(
 	waiting: boolean,
 ): string {
 	if (pending && waiting) {
-		return `Checking ${pending.owner}/${pending.repo}… | ${SITE}`;
+		return `Reviewing ${pending.owner}/${pending.repo}… | ${SITE}`;
 	}
 	switch (state.kind) {
 		case "report":
@@ -102,6 +102,9 @@ export default function App() {
 	const [pending, setPending] = useState<Repo | null>(null);
 	const [waiting, setWaiting] = useState(false);
 	const loading = pending !== null;
+	// Once a report has been shown the hero shrinks to a bar and stays one,
+	// so errors and re-checks don't make the page jump back and forth.
+	const [compact, setCompact] = useState(false);
 	// Only the latest request may touch the screen (Back/Forward can overtake).
 	const latest = useRef(0);
 	const started = useRef(false);
@@ -111,6 +114,7 @@ export default function App() {
 		setInput("");
 		setPending(null);
 		setWaiting(false);
+		setCompact(false);
 		setState({ kind: "idle" });
 	}, []);
 
@@ -143,6 +147,7 @@ export default function App() {
 		clearTimeout(timer);
 		if (id !== latest.current) return;
 		setState(next);
+		if (next.kind === "report") setCompact(true);
 		setWaiting(false);
 		setPending(null);
 	}, []);
@@ -187,74 +192,109 @@ export default function App() {
 		reset();
 	}
 
+	const hideIdle = !(pending && waiting);
+	// Empty state: nothing asked yet, so the hero fills the screen.
+	const bare = !compact && state.kind === "idle" && !pending;
 	return (
-		<main className="mx-auto max-w-[760px] px-4 py-10 md:py-12">
-			<header>
-				<p className="font-semibold">
-					<a href="/" onClick={home} className="hover:underline">
-						{SITE}
-					</a>
-				</p>
-				<h1 className="mt-6 text-h1 font-semibold">
-					Will we regret depending on this?
-				</h1>
-				<p className="mt-2 max-w-[75ch] text-muted">
-					Checks who will maintain an open-source dependency two years from now.
-				</p>
-			</header>
-			<form onSubmit={onSubmit} className="mt-6 flex gap-2">
-				<label htmlFor="repo" className="sr-only">
-					GitHub repository, as owner/repo or a link
-				</label>
-				<input
-					id="repo"
-					value={input}
-					onChange={(e) => setInput(e.target.value)}
-					placeholder="owner/repo or GitHub link"
-					autoComplete="off"
-					spellCheck={false}
-					autoCapitalize="off"
-					className="min-w-0 flex-1 rounded-[6px] border border-rule bg-surface px-3 py-2 text-body placeholder:text-muted"
-				/>
-				<button
-					type="submit"
-					disabled={loading}
-					className="shrink-0 cursor-pointer rounded-[6px] bg-ink px-4 py-2 text-body font-semibold text-surface disabled:cursor-default disabled:bg-muted"
+		<>
+			<header
+				className={`border-b border-rule bg-surface ${compact ? "sticky top-0 z-10" : ""}`}
+			>
+				<div
+					className={`mx-auto max-w-[760px] px-4 ${
+						compact
+							? "flex items-center justify-between gap-4 py-1.5 sm:py-2.5"
+							: `flex flex-col items-center py-10 text-center md:py-16 ${
+									bare ? "min-h-[75vh] justify-center md:min-h-[85vh]" : ""
+								}`
+					}`}
 				>
-					{loading ? "Checking…" : "Check repo"}
-				</button>
-			</form>
-
-			<div aria-live="polite" className="mt-12">
-				{pending && waiting && <Waiting repo={pending} />}
-				{!(pending && waiting) && state.kind === "idle" && (
-					<div className="space-y-2">
-						<p className="max-w-[75ch]">
-							Paste a GitHub repository to see whether anyone will keep
-							maintaining it.
+					<p
+						className={`font-semibold text-accent ${compact ? "max-sm:sr-only" : ""}`}
+					>
+						<a href="/" onClick={home} className="hover:underline">
+							{SITE}
+						</a>
+					</p>
+					<h1
+						className={
+							compact
+								? "sr-only"
+								: "mt-6 max-w-[30ch] text-balance text-[34px] leading-[1.2] font-semibold text-ink md:text-[48px]"
+						}
+					>
+						Will we regret depending on this?
+					</h1>
+					{!compact && (
+						<p className="mt-3 text-[18px] text-muted">
+							Checks who will maintain an open-source dependency two years from
+							now.
 						</p>
-						<Examples onPick={pick} />
-					</div>
-				)}
-				{!(pending && waiting) && state.kind === "error" && (
-					<div className="space-y-2">
+					)}
+					<form
+						onSubmit={onSubmit}
+						className={`flex w-full items-center rounded-[10px] border border-unknown bg-surface focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgba(31,79,191,0.15)] ${
+							compact
+								? "h-11 pr-1 sm:w-[420px]"
+								: "mt-8 h-16 max-w-[680px] pr-2"
+						}`}
+					>
+						<label htmlFor="repo" className="sr-only">
+							GitHub repository, as owner/repo or a link
+						</label>
+						<input
+							id="repo"
+							value={input}
+							onChange={(e) => setInput(e.target.value)}
+							placeholder="owner/repo or GitHub link"
+							autoComplete="off"
+							spellCheck={false}
+							autoCapitalize="off"
+							className={`h-full min-w-0 flex-1 bg-transparent text-ink placeholder:text-unknown focus-visible:outline-none ${compact ? "pl-3 text-body" : "pl-5 text-body md:text-[18px]"}`}
+						/>
+						<button
+							type="submit"
+							disabled={loading}
+							className={`shrink-0 cursor-pointer rounded-[6px] bg-accent px-4 text-body font-semibold text-surface hover:bg-accent-dark disabled:cursor-default disabled:opacity-60 ${compact ? "h-9" : "h-12"}`}
+						>
+							{loading ? "Reviewing…" : "Review"}
+						</button>
+					</form>
+					{!compact && (
+						<>
+							<div
+								aria-hidden="true"
+								className="mt-2 flex h-[3px] w-full max-w-[680px] gap-1"
+							>
+								<span className="flex-1 rounded-[2px] bg-ok" />
+								<span className="flex-1 rounded-[2px] bg-watch" />
+								<span className="flex-1 rounded-[2px] bg-risk" />
+							</div>
+							<div className="mt-4">
+								<Examples onPick={pick} />
+							</div>
+						</>
+					)}
+				</div>
+			</header>
+			<main className="mx-auto max-w-[760px] px-4 pt-8 pb-12">
+				<div aria-live="polite">
+					{pending && waiting && <Waiting repo={pending} />}
+					{hideIdle && state.kind === "error" && (
 						<p className="max-w-[75ch]">
 							{errorMessage(state.failure, state.repo)}
 						</p>
-						{state.failure.code === "rate_limited" && (
-							<Examples onPick={pick} />
-						)}
-					</div>
-				)}
-				{!(pending && waiting) && state.kind === "report" && (
-					<div>
-						<Report
-							key={`${state.report.repo}@${state.report.meta.fetched_at}`}
-							report={state.report}
-						/>
-					</div>
-				)}
-			</div>
-		</main>
+					)}
+					{hideIdle && state.kind === "report" && (
+						<div>
+							<Report
+								key={`${state.report.repo}@${state.report.meta.fetched_at}`}
+								report={state.report}
+							/>
+						</div>
+					)}
+				</div>
+			</main>
+		</>
 	);
 }

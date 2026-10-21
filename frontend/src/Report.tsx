@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { Repo } from "./api";
-import { age, compact, monthYear } from "./format";
+import { age, compact, evidenceRows, monthYear } from "./format";
 import { SignalIcon } from "./icons";
 import type { Level, Report as ReportData, Signal, SignalId } from "./types";
 
@@ -157,20 +157,44 @@ function keyValue({ id, evidence: e }: Signal): string | null {
 	}
 }
 
-function show(value: unknown): string {
-	return typeof value === "object" && value !== null
-		? JSON.stringify(value)
-		: String(value);
+export const evidenceId = (id: SignalId) => `evidence-${id}`;
+
+function Evidence({ signal, open }: { signal: Signal; open: boolean }) {
+	return (
+		<div
+			id={evidenceId(signal.id)}
+			hidden={!open}
+			className="mt-3 self-start rounded-[4px] bg-paper px-[14px] py-3"
+		>
+			<dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4">
+				{evidenceRows(signal.evidence).map(({ key, label, value }) => (
+					<div
+						key={key}
+						className="col-span-2 grid grid-cols-subgrid items-baseline border-t border-rule py-1.5 first:border-t-0 first:pt-0 last:pb-0"
+					>
+						<dt className="text-[13px] text-muted">{label}</dt>
+						<dd
+							className={`min-w-0 text-small tabular-nums [overflow-wrap:anywhere] ${value.length > 24 ? "text-left" : "text-right"}`}
+						>
+							{value}
+						</dd>
+					</div>
+				))}
+			</dl>
+		</div>
+	);
 }
 
 function Tile({
 	signal,
 	wide,
 	grow,
+	open,
 }: {
 	signal: Signal;
 	wide: boolean;
 	grow?: Grow;
+	open: boolean;
 }) {
 	const l = look(signal);
 	const value = keyValue(signal);
@@ -204,21 +228,7 @@ function Tile({
 					<p className="mt-1 max-w-[75ch]">{signal.summary}</p>
 				</>
 			)}
-			<details className="mt-3 text-small">
-				<summary className="w-fit cursor-pointer rounded-[4px] text-muted">
-					Show evidence
-				</summary>
-				<dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
-					{Object.entries(signal.evidence).map(([key, value]) => (
-						<div key={key} className="contents">
-							<dt className="text-muted">{key}</dt>
-							<dd className="min-w-0 [overflow-wrap:anywhere]">
-								{show(value)}
-							</dd>
-						</div>
-					))}
-				</dl>
-			</details>
+			<Evidence signal={signal} open={open} />
 		</section>
 	);
 }
@@ -242,7 +252,8 @@ function ReportHeader({ repo, context: c }: ReportData) {
 		["Created", monthYear(c.created_at)],
 		["Last push", `${age(c.pushed_at)} ago`],
 	];
-	const link = "underline underline-offset-2 [overflow-wrap:anywhere]";
+	const link =
+		"text-accent underline underline-offset-2 [overflow-wrap:anywhere]";
 	return (
 		<div className="mb-4">
 			<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
@@ -296,7 +307,7 @@ export function Waiting({ repo }: { repo: Repo }) {
 	return (
 		<div className={`${PANEL} border-t-[3px]`}>
 			<p>
-				Checking{" "}
+				Reviewing{" "}
 				<span className="font-mono">{`${repo.owner}/${repo.repo}`}</span>…
 			</p>
 			<svg
@@ -328,6 +339,7 @@ export function Report({ report }: { report: ReportData }) {
 	useEffect(() => {
 		seen.add(key);
 	}, [key]);
+	const [open, setOpen] = useState(false);
 	const level = LEVELS[report.verdict.level];
 	const signals = [...report.signals].sort(
 		(a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id),
@@ -357,12 +369,40 @@ export function Report({ report }: { report: ReportData }) {
 				<p className="mt-2 max-w-[75ch] text-h2">{report.verdict.reason}</p>
 				<p className="mt-2 text-small text-muted">{freshness(report)}</p>
 			</header>
-			<div className="mt-6 grid grid-cols-1 gap-x-4 md:grid-cols-2">
+			<div className="mt-6 flex justify-end">
+				<button
+					type="button"
+					onClick={() => setOpen(!open)}
+					aria-expanded={open}
+					aria-controls={ORDER.map((id) => evidenceId(id as SignalId)).join(
+						" ",
+					)}
+					className="flex h-9 cursor-pointer items-center gap-2 rounded-[6px] border border-rule bg-surface px-3 text-small font-semibold text-ink hover:border-unknown"
+				>
+					{open ? "Hide evidence" : "Show evidence"}
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 20 20"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						aria-hidden="true"
+						className={`text-muted ${open ? "rotate-180" : ""}`}
+					>
+						<path d="M5 8l5 5 5-5" />
+					</svg>
+				</button>
+			</div>
+			<div className="mt-2 grid grid-cols-1 gap-x-4 md:grid-cols-2">
 				{signals.map((s, i) => (
 					<Tile
 						key={s.id}
 						signal={s}
 						wide={s.id === "license"}
+						open={open}
 						grow={animate ? { delay: 300 + i * 40, step: 0 } : undefined}
 					/>
 				))}
@@ -376,7 +416,10 @@ export function Report({ report }: { report: ReportData }) {
 				<p className="mt-2">
 					The thresholds are heuristics we chose, not research. Read them, or
 					disagree, in{" "}
-					<a href={THRESHOLDS_URL} className="underline underline-offset-2">
+					<a
+						href={THRESHOLDS_URL}
+						className="text-accent underline underline-offset-2"
+					>
 						thresholds.py
 					</a>
 					.
