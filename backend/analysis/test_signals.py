@@ -329,6 +329,28 @@ def test_releases_skips_drafts():
     assert result.status is Status.AMBER
 
 
+def test_releases_uses_newest_published_date_not_list_order():
+    payload = [
+        release(400, tag="v1.0"),
+        release(10, tag="v2.0"),
+        release(100, tag="v1.5"),
+    ]
+
+    result = releases(payload, NOW)
+
+    assert result.evidence["tag_name"] == "v2.0"
+    assert result.evidence["days_since_last_release"] == 10
+    assert result.status is Status.GREEN
+
+
+def test_releases_newest_date_ignores_a_newer_draft_in_any_position():
+    payload = [release(400, tag="v1.0"), release(1, draft=True, tag="v9-draft")]
+
+    result = releases(payload, NOW)
+
+    assert result.evidence["tag_name"] == "v1.0"
+
+
 @pytest.mark.parametrize("payload", [[], [release(1, draft=True)]])
 def test_releases_amber_when_no_published_releases(payload):
     result = releases(payload, NOW)

@@ -160,8 +160,12 @@ def responsiveness(issues: list[dict], repo: dict, now: datetime) -> SignalResul
 
 
 def releases(releases_json: list[dict], now: datetime) -> SignalResult:
-    """Age of the latest non-draft release."""
-    latest = next((r for r in releases_json if not r.get("draft")), None)
+    """Age of the most recently published non-draft release.
+
+    The API lists by creation date, so the newest publication can sit anywhere.
+    """
+    published = [r for r in releases_json if not r.get("draft")]
+    latest = max(published, key=lambda r: _parse(r["published_at"]), default=None)
     if latest is None:
         return SignalResult(
             "releases",
