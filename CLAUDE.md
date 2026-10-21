@@ -55,10 +55,17 @@ Browser → Django only; only the backend calls GitHub.
 - `backend/analysis/views.py` — `GET /api/repos/{owner}/{repo}/report` → 200 / 400 / 404 / 422 / 429 / 502
 - `GET /api/health` → `{"status":"ok"}`; never calls GitHub.
 - Response: `{ repo, verdict, signals: [{id, status, summary, evidence}], context, meta: {cached, stale, fetched_at, rate_limit: {remaining, reset_at} | null} }`; `verdict: {level, reason}`; `repo` = `full_name` from GitHub.
+  `context` = `{stars, forks, language, created_at, pushed_at, archived, description, watchers, open_issues, html_url, homepage}`;
+  `watchers` = GitHub `subscribers_count`, `open_issues` = GitHub `open_issues_count` (issues and PRs), `homepage` is null when empty.
+  `verdict.reason` is plain sentences, each cause named once, in this order: archived / liveness stalled / no license, then
+  "Red signals: …" ("Also red: …" after a sentence), "Amber signals: …", "Only X is a minor concern", "Check the license",
+  "Not enough data for …"; "Every signal is healthy" when there is nothing to say.
 - Errors: `{error: {code, message, reset_at?}}`, code ∈ `invalid_repo` 400, `not_found` 404, `empty_repo` 422 (GitHub 409 on commits; cached 1h like `not_found`), `rate_limited` 429, `upstream_error` 502.
   `rate_limit` is null when served from fresh cache (no GitHub call).
 - Cache: Django cache framework on SQLite/file. No Postgres, no Redis, no auth.
 - Frontend: Vite + React + TypeScript + Tailwind, one page: form → loading → report / error.
+  No new dependencies. Icons are inline SVG only. All UI text comes from `docs/design.md`, which must be read and kept
+  up to date for any UI change. Its "Don't" list holds, with one exception: the verdict panel may carry a tone tint.
 
 ## Stack and tooling
 - Python: uv, Django, httpx, pytest, respx, Ruff
@@ -69,7 +76,8 @@ Browser → Django only; only the backend calls GitHub.
 - `make dev` runs in compose; `make lint`/`make test` run on the host and need uv and Node 24.
 
 ## Workflow
-- Work is tracked as GitHub Issues #1–#6 on the project board. One issue = one branch.
+- Work is tracked as GitHub Issues #1–#9 on the project board. One issue = one branch.
+  Order: #5 (prod image, deploy) → #6 (README + video) → #7/#8/#9 optional.
 - Branches are `<type>/<N>-<slug>`; the human creates them, you only suggest the name.
 - **Never commit, push or open PRs.** Stage changes with `git add` only. The human commits.
 - At the end of each logical step, run `/ponytail-review`, stage, then print:
