@@ -131,6 +131,13 @@ def responsiveness(issues: list[dict], repo: dict, now: datetime) -> SignalResul
         "open_issues_count": open_count,
     }
 
+    if not repo.get("has_issues", True):
+        return SignalResult(
+            "responsiveness",
+            Status.AMBER,
+            "Issues disabled: nothing to measure.",
+            evidence,
+        )
     if not durations and open_count > 0:
         return SignalResult(
             "responsiveness",

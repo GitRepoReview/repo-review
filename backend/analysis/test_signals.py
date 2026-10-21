@@ -258,6 +258,31 @@ def test_responsiveness_red_when_nothing_closed_but_issues_open():
     assert result.evidence["median_close_days"] is None
 
 
+def test_responsiveness_amber_when_issues_are_disabled():
+    repo = {"has_issues": False, "open_issues_count": 0}
+
+    result = responsiveness([], repo, NOW)
+
+    assert result.status is Status.AMBER
+    assert "issues disabled" in result.summary.lower()
+
+
+def test_responsiveness_issues_disabled_is_never_red():
+    repo = {"has_issues": False, "open_issues_count": 7}
+
+    result = responsiveness([], repo, NOW)
+
+    assert result.status is Status.AMBER
+
+
+def test_responsiveness_red_when_nothing_closed_and_issues_enabled():
+    repo = {"has_issues": True, "open_issues_count": 12}
+
+    result = responsiveness([], repo, NOW)
+
+    assert result.status is Status.RED
+
+
 def test_responsiveness_amber_when_nothing_closed_and_nothing_open():
     result = responsiveness([], {"open_issues_count": 0}, NOW)
 
