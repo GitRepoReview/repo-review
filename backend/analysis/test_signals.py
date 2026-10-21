@@ -578,7 +578,7 @@ def test_verdict_stalled_liveness_reason_says_no_commits_in_12_months():
 
     assert result.level is Risk.HIGH
     assert (
-        "no commits in 12 months — you'd likely maintain it yourself" in result.reason
+        "No commits in 12 months — you'd likely maintain it yourself" in result.reason
     )
 
 
@@ -586,7 +586,7 @@ def test_verdict_archived_reason_says_archived_by_the_owner():
     result = verdict(signals(R, G, G, G, G), archived=True)
 
     assert result.level is Risk.HIGH
-    assert "archived by the owner — you'd maintain it yourself" in result.reason
+    assert "Archived by the owner — you'd maintain it yourself" in result.reason
     assert "no commits" not in result.reason
 
 
@@ -603,16 +603,16 @@ def test_verdict_no_license_reason_warns_about_the_right_to_use():
 def test_verdict_names_a_red_signal_next_to_the_archived_flag():
     result = verdict(signals(G, G, G, R, G), archived=True)
 
-    assert "archived by the owner" in result.reason
-    assert "releases" in result.reason
+    assert "Archived by the owner" in result.reason
+    assert "Releases" in result.reason
 
 
 def test_verdict_names_each_cause_once():
     result = verdict(signals(R, G, G, R, R), archived=False)
 
-    assert result.reason.count("no commits in 12 months") == 1
+    assert result.reason.count("No commits in 12 months") == 1
     assert result.reason.count("no license file") == 1
-    assert result.reason.count("releases") == 1
+    assert result.reason.count("Releases") == 1
     assert "liveness" not in result.reason
 
 
@@ -640,7 +640,7 @@ def test_verdict_mentions_amber_license():
     result = verdict(signals(G, G, G, G, A), archived=False)
 
     assert result.level is Risk.LOW
-    assert "check the license" in result.reason
+    assert result.reason == "Check the license."
 
 
 def test_verdict_mentions_each_insufficient_data_signal():
@@ -651,23 +651,38 @@ def test_verdict_mentions_each_insufficient_data_signal():
         archived=False,
     )
 
-    assert "not enough data for bus_factor" in result.reason
-    assert "not enough data for responsiveness" in result.reason
-    assert "not enough data for releases" in result.reason
+    assert result.reason == "Not enough data for One author, Issue response, Releases."
 
 
 def test_verdict_reason_names_the_signals_that_drove_it():
     result = verdict(signals(G, R, G, R, G), archived=False)
 
-    assert "bus_factor" in result.reason
-    assert "releases" in result.reason
+    assert "One author" in result.reason
+    assert "Releases" in result.reason
+    assert "bus_factor" not in result.reason
 
 
 def test_verdict_medium_reason_names_amber_signals():
     result = verdict(signals(G, A, A, G, G), archived=False)
 
-    assert "bus_factor" in result.reason
-    assert "responsiveness" in result.reason
+    assert "One author" in result.reason
+    assert "Issue response" in result.reason
+
+
+def test_verdict_reason_has_no_risk_level_prefix():
+    for statuses in [(G, G, G, G, G), (G, A, A, G, G), (R, G, G, G, G)]:
+        reason = verdict(signals(*statuses), archived=False).reason
+        assert "risk:" not in reason.lower()
+        assert reason[0].isupper()
+
+
+def test_verdict_reason_groups_sentences():
+    result = verdict(signals(R, R, G, A, G, insufficient=("releases",)), archived=False)
+
+    assert result.reason == (
+        "No commits in 12 months — you'd likely maintain it yourself. "
+        "Also red: One author. Not enough data for Releases."
+    )
 
 
 def test_verdict_low_reason_is_one_sentence():
