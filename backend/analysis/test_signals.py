@@ -239,6 +239,29 @@ def test_responsiveness_skips_pull_requests():
     assert result.status is Status.GREEN
 
 
+def test_responsiveness_skips_issues_closed_as_duplicate():
+    duplicates = [
+        {**closed_issue(open_days=500), "state_reason": "duplicate"} for _ in range(10)
+    ]
+
+    result = responsiveness(three_closed(1) + duplicates, {"open_issues_count": 5}, NOW)
+
+    assert result.evidence["closed_count"] == 3
+    assert result.status is Status.GREEN
+
+
+def test_responsiveness_keeps_not_planned_and_completed_issues():
+    issues = [
+        {**closed_issue(open_days=1), "state_reason": "not_planned"},
+        {**closed_issue(open_days=1), "state_reason": "completed"},
+        {**closed_issue(open_days=1), "state_reason": None},
+    ]
+
+    result = responsiveness(issues, {"open_issues_count": 5}, NOW)
+
+    assert result.evidence["closed_count"] == 3
+
+
 def test_responsiveness_filters_by_closed_at_in_code():
     stale = closed_issue(open_days=1, closed_days_ago=91)
     boundary = closed_issue(open_days=1, closed_days_ago=90)

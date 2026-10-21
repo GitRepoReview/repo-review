@@ -115,14 +115,20 @@ def bus_factor(commits: list[dict]) -> SignalResult:
 
 
 def responsiveness(issues: list[dict], repo: dict, now: datetime) -> SignalResult:
-    """Median time to close issues (not PRs) closed in the last 90 days."""
+    """Median time to close issues closed in the last 90 days.
+
+    Pull requests and issues closed as duplicates are left out: neither says
+    how fast the maintainers respond.
+    """
     window = t.RESPONSIVENESS_WINDOW_DAYS
     cutoff = now - timedelta(days=window)
     open_count = repo.get("open_issues_count", 0)
     durations = [
         (_parse(i["closed_at"]) - _parse(i["created_at"])).total_seconds() / 86400
         for i in issues
-        if "pull_request" not in i and _parse(i["closed_at"]) >= cutoff
+        if "pull_request" not in i
+        and i.get("state_reason") != "duplicate"
+        and _parse(i["closed_at"]) >= cutoff
     ]
     median_days = round(median(durations), 1) if durations else None
     evidence = {
