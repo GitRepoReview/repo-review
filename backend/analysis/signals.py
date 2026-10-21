@@ -261,9 +261,13 @@ def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
         causes.append(STALLED)
     if no_license:
         causes.append(NO_LICENSE)
-    named = ["liveness"] * (archived or stalled) + ["license"] * no_license
+    named = []
+    if archived or stalled:
+        named.append("liveness")
+    if no_license:
+        named.append("license")
     other_reds = [i for i in reds if i not in named]
-    if other_reds and (level is not Risk.HIGH or len(reds) >= t.VERDICT_HIGH_RED_COUNT):
+    if other_reds:
         label = "also red" if causes else "red signals"
         causes.append(f"{label}: {', '.join(other_reds)}")
     if level is Risk.MEDIUM and len(counted) >= t.VERDICT_MEDIUM_AMBER_COUNT:

@@ -600,6 +600,13 @@ def test_verdict_no_license_reason_warns_about_the_right_to_use():
     assert "maintain it yourself" not in result.reason
 
 
+def test_verdict_names_a_red_signal_next_to_the_archived_flag():
+    result = verdict(signals(G, G, G, R, G), archived=True)
+
+    assert "archived by the owner" in result.reason
+    assert "releases" in result.reason
+
+
 def test_verdict_names_each_cause_once():
     result = verdict(signals(R, G, G, R, R), archived=False)
 
