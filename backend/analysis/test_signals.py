@@ -21,8 +21,9 @@ def ago(days=0, hours=0):
     return (NOW - timedelta(days=days, hours=hours)).isoformat()
 
 
-def commit(login="alice", *, type="User", email="a@example.com", days=1):
+def commit(login="alice", *, type="User", email="a@example.com", days=1, parents=1):
     return {
+        "parents": [{"sha": "p"}] * parents,
         "author": {"login": login, "type": type} if login else None,
         "commit": {"author": {"email": email}, "committer": {"date": ago(days)}},
     }
@@ -134,6 +135,35 @@ def test_bus_factor_ignores_bots_by_login_suffix_and_by_type():
     assert result.evidence["human_commits"] == 12
     assert result.evidence["bot_commits"] == 100
     assert result.evidence["top_author_share_pct"] == 50
+
+
+def test_bus_factor_ignores_merge_commits():
+    merges = [commit("alice", parents=2) for _ in range(50)]
+
+    result = bus_factor(commits_by({"alice": 6, "bob": 6}) + merges)
+
+    assert result.status is Status.AMBER
+    assert result.evidence["human_commits"] == 12
+    assert result.evidence["merge_commits"] == 50
+    assert result.evidence["top_author_share_pct"] == 50
+
+
+def test_bus_factor_merge_commits_do_not_count_towards_minimum_activity():
+    merges = [commit("alice", parents=2) for _ in range(20)]
+
+    result = bus_factor(commits_by({"alice": 9}) + merges)
+
+    assert result.status is Status.AMBER
+    assert "too little activity" in result.summary.lower()
+
+
+def test_bus_factor_red_summary_names_the_concentration():
+    result = bus_factor(commits_by({"alice": 9, "bob": 1}))
+
+    assert result.status is Status.RED
+    assert "concentrated" in result.summary
+    assert "alice" in result.summary
+    assert "90" in result.summary
 
 
 def test_bus_factor_falls_back_to_commit_email_when_no_github_login():

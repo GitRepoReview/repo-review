@@ -43,8 +43,9 @@ def statuses(signals):
 
 
 def test_active_repo_pallets_flask_is_medium_risk():
-    # Predicted low. One maintainer wrote 93% of the commits (bus factor red)
-    # and the last release is 8 months old (amber).
+    # Predicted low. One maintainer wrote 88% of the non-merge commits (bus
+    # factor red, after dropping 36 merge commits) and the last release is
+    # 8 months old (amber).
     signals, result = report("pallets_flask")
 
     assert statuses(signals) == {
@@ -54,6 +55,10 @@ def test_active_repo_pallets_flask_is_medium_risk():
         "releases": "amber",
         "license": "green",
     }
+    evidence = signals["bus_factor"].evidence
+    assert evidence["merge_commits"] == 36
+    assert evidence["top_author_share_pct"] == 87.9
+    assert "concentrated" in signals["bus_factor"].summary
     assert result.level is Risk.MEDIUM
 
 

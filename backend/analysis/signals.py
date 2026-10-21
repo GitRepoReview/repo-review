@@ -74,11 +74,17 @@ def _author_key(commit: dict) -> str:
 
 
 def bus_factor(commits: list[dict]) -> SignalResult:
-    """Share of human commits by the single most active author."""
-    humans = [c for c in commits if not _is_bot(c)]
+    """Share of human commits by the single most active author.
+
+    Merge commits carry the merger's name, not an author's work, so they are
+    left out of authorship.
+    """
+    authored = [c for c in commits if len(c.get("parents", ())) <= 1]
+    humans = [c for c in authored if not _is_bot(c)]
     evidence: dict[str, Any] = {
         "human_commits": len(humans),
-        "bot_commits": len(commits) - len(humans),
+        "bot_commits": len(authored) - len(humans),
+        "merge_commits": len(commits) - len(authored),
         "top_author": None,
         "top_author_share_pct": None,
     }
@@ -103,6 +109,8 @@ def bus_factor(commits: list[dict]) -> SignalResult:
         status = Status.RED
     pct = evidence["top_author_share_pct"]
     summary = f"{author} wrote {pct:g}% of {len(humans)} human commits."
+    if status is Status.RED:
+        summary = f"Commits are concentrated in one author: {summary}"
     return SignalResult("bus_factor", status, summary, evidence)
 
 
