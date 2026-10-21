@@ -1,10 +1,18 @@
-import { type FormEvent, useState } from "react";
+import {
+	type FormEvent,
+	type MouseEvent,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { type Failure, fetchReport, parseRepo, type Repo } from "./api";
 import { localTime } from "./format";
-import { Report, Waiting } from "./Report";
+import { LEVELS, Report, Waiting } from "./Report";
 import type { Report as ReportData } from "./types";
 
 const WAIT_MS = 250;
+const SITE = "RepoReview";
 
 const EXAMPLES = ["pallets/flask", "request/request", "sindresorhus/p-map"];
 
@@ -51,6 +59,41 @@ function errorMessage({ code, resetAt }: Failure, repo: Repo | null): string {
 	}
 }
 
+function repoParam(): string | null {
+	return new URLSearchParams(location.search).get("repo");
+}
+
+// /?repo=owner/repo — a query parameter, so the server only ever serves "/".
+function repoUrl(text: string): string {
+	return `/?repo=${encodeURIComponent(text).replaceAll("%2F", "/")}`;
+}
+
+function navigate(url: string) {
+	if (url !== location.pathname + location.search) {
+		history.pushState(null, "", url);
+	}
+}
+
+function pageTitle(
+	state: State,
+	pending: Repo | null,
+	waiting: boolean,
+): string {
+	if (pending && waiting) {
+		return `Checking ${pending.owner}/${pending.repo}… | ${SITE}`;
+	}
+	switch (state.kind) {
+		case "report":
+			return `${state.report.repo}: ${LEVELS[state.report.verdict.level].word} | ${SITE}`;
+		case "error":
+			return state.failure.code === "not_found" && state.repo
+				? `${state.repo.owner}/${state.repo.repo}: not found | ${SITE}`
+				: `Error | ${SITE}`;
+		default:
+			return SITE;
+	}
+}
+
 export default function App() {
 	const [input, setInput] = useState("");
 	const [state, setState] = useState<State>({ kind: "idle" });
@@ -59,10 +102,27 @@ export default function App() {
 	const [pending, setPending] = useState<Repo | null>(null);
 	const [waiting, setWaiting] = useState(false);
 	const loading = pending !== null;
+	// Only the latest request may touch the screen (Back/Forward can overtake).
+	const latest = useRef(0);
+	const started = useRef(false);
 
-	async function check(text: string) {
+	const reset = useCallback(() => {
+		latest.current++;
+		setInput("");
+		setPending(null);
+		setWaiting(false);
+		setState({ kind: "idle" });
+	}, []);
+
+	const load = useCallback(async (text: string, push: boolean) => {
+		const id = ++latest.current;
 		const repo = parseRepo(text);
+		const slug = repo ? `${repo.owner}/${repo.repo}` : text.trim();
+		if (push) navigate(repoUrl(slug));
+		setInput(slug);
+		setWaiting(false);
 		if (!repo) {
+			setPending(null);
 			setState({
 				kind: "error",
 				failure: { code: "invalid_repo" },
@@ -71,32 +131,70 @@ export default function App() {
 			return;
 		}
 		setPending(repo);
-		const timer = setTimeout(() => setWaiting(true), WAIT_MS);
+		const timer = setTimeout(() => {
+			if (id === latest.current) setWaiting(true);
+		}, WAIT_MS);
+		let next: State;
 		try {
-			setState({ kind: "report", report: await fetchReport(repo) });
+			next = { kind: "report", report: await fetchReport(repo) };
 		} catch (failure) {
-			setState({ kind: "error", failure: failure as Failure, repo });
-		} finally {
-			clearTimeout(timer);
-			setWaiting(false);
-			setPending(null);
+			next = { kind: "error", failure: failure as Failure, repo };
 		}
-	}
+		clearTimeout(timer);
+		if (id !== latest.current) return;
+		setState(next);
+		setWaiting(false);
+		setPending(null);
+	}, []);
+
+	useEffect(() => {
+		const onPop = () => {
+			const param = repoParam();
+			if (param) load(param, false);
+			else reset();
+		};
+		window.addEventListener("popstate", onPop);
+		return () => window.removeEventListener("popstate", onPop);
+	}, [load, reset]);
+
+	// Opened on /?repo=…: run it once (a ref survives StrictMode's double effect).
+	useEffect(() => {
+		if (started.current) return;
+		started.current = true;
+		const text = repoParam();
+		if (text) load(text, false);
+	}, [load]);
+
+	useEffect(() => {
+		document.title = pageTitle(state, pending, waiting);
+	}, [state, pending, waiting]);
 
 	function onSubmit(e: FormEvent) {
 		e.preventDefault();
-		if (!loading) check(input);
+		if (!loading) load(input, true);
 	}
 
 	function pick(slug: string) {
-		setInput(slug);
-		if (!loading) check(slug);
+		if (!loading) load(slug, true);
+	}
+
+	function home(e: MouseEvent<HTMLAnchorElement>) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+			return;
+		}
+		e.preventDefault();
+		navigate("/");
+		reset();
 	}
 
 	return (
 		<main className="mx-auto max-w-[760px] px-4 py-10 md:py-12">
 			<header>
-				<p className="font-semibold">RepoReview</p>
+				<p className="font-semibold">
+					<a href="/" onClick={home} className="hover:underline">
+						{SITE}
+					</a>
+				</p>
 				<h1 className="mt-6 text-h1 font-semibold">
 					Will we regret depending on this?
 				</h1>

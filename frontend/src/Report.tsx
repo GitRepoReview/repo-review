@@ -15,7 +15,7 @@ const NAMES: Record<SignalId, string> = {
 	license: "License",
 };
 
-const LEVELS: Record<Level, { word: string; text: string }> = {
+export const LEVELS: Record<Level, { word: string; text: string }> = {
 	low: { word: "Low risk", text: "text-ok" },
 	medium: { word: "Medium risk", text: "text-watch" },
 	high: { word: "High risk", text: "text-risk" },
