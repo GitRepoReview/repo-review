@@ -26,7 +26,7 @@ All thresholds live in one file: `backend/analysis/thresholds.py`.
 No GitHub token by default (60 req/h per server IP). `GITHUB_TOKEN` env is an emergency escape only.
 Note: ETag/304 does NOT save quota without a token — don't rely on it.
 Protection, in order: cache 24h on disk (SQLite) → stale-while-revalidate → single-flight per repo
-→ refuse to start if `X-RateLimit-Remaining` < 4 (429 with `reset_at`, or stale data) → pre-warm demo repos
+→ refuse to start a new analysis (not the app) if `X-RateLimit-Remaining` < 4 (429 with `reset_at`, or stale data) → pre-warm demo repos
 → UI shows data source, freshness, remaining quota. ~4 requests per uncached analysis.
 
 ## Architecture
@@ -34,6 +34,7 @@ Browser → Django only; only the backend calls GitHub.
 - `backend/analysis/github_client.py` — httpx, timeouts, `X-RateLimit-*`, typed errors (`RepoNotFound`, `RateLimited`, `UpstreamError`)
 - `backend/analysis/signals.py` — pure functions `raw JSON → SignalResult(status, summary, evidence)`; no HTTP here
 - `backend/analysis/views.py` — `GET /api/repos/{owner}/{repo}/report` → 200 / 404 / 429 / 502
+- `GET /api/health` → `{"status":"ok"}`; never calls GitHub.
 - Response: `{ repo, verdict, signals: [{id, status, summary, evidence}], context, meta: {cached, fetched_at, rate_limit: {remaining, reset_at}} }`
 - Cache: Django cache framework on SQLite/file. No Postgres, no Redis, no auth.
 - Frontend: Vite + React + TypeScript + Tailwind, one page: form → loading → report / error.
@@ -44,9 +45,11 @@ Browser → Django only; only the backend calls GitHub.
 - `compose.yaml` for dev (backend runserver + Vite with `/api` proxy). No DB service.
 - Prod: multi-stage Dockerfile (Node build → Python runtime, WhiteNoise, gunicorn), deployed to selfhost.dev
 - `make dev`, `make test`, `make lint`
+- `make dev` runs in compose; `make lint`/`make test` run on the host and need uv and Node 24.
 
 ## Workflow
 - Work is tracked as GitHub Issues #1–#6 on the project board. One issue = one branch.
+- Branches are `<type>/<N>-<slug>`; the human creates them, you only suggest the name.
 - **Never commit, push or open PRs.** Stage changes with `git add` only. The human commits.
 - At the end of each logical step, run `/ponytail-review`, stage, then print:
   - suggested commit message(s): Conventional Commits, imperative, ≤ 50 chars, issue ref,
@@ -54,6 +57,7 @@ Browser → Django only; only the backend calls GitHub.
     (say which files go in which commit)
   - a "Decisions" block: any choice made that is not already in this file, with the reason
 - Decisions are recorded outside the repo (project HQ). If a decision changes something in this file, propose the edit — don't apply it silently.
+- Use the frontend-design skill for UI work (#4).
 - TDD only for `signals.py` (issue #2). No TDD ceremony for UI/infra.
 - Out of scope (list in README "what we cut"): multi-repo comparison, dependency trees, CVE/OSV,
   activity charts, auth/history, configurable thresholds, E2E tests.
