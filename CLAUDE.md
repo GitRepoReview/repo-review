@@ -9,16 +9,23 @@ Time budget: one evening (~5.5 h). One thing done well beats four half-built.
 "Regret" = in two years nobody maintains it and we can't easily replace or patch it.
 The app scores **maintenance sustainability**, not code quality. Five signals, each with evidence:
 
-| Signal | GitHub endpoint | Red flag (starting threshold) |
-|---|---|---|
-| Liveness | `GET /repos/{o}/{r}` (`archived`, `pushed_at`) | archived, or no commits in 12 months |
-| Bus factor | `GET /repos/{o}/{r}/commits?since=<12mo>&per_page=100` | one author > 80% of commits |
-| Responsiveness | `GET /repos/{o}/{r}/issues?state=closed&since=<90d>&per_page=100` | median close time > 90 days, or almost nothing closed |
-| Releases | `GET /repos/{o}/{r}/releases?per_page=10` | last release > 18 months ago |
-| License | `license.spdx_id` from repo | none → high; copyleft → "check with legal" |
+| Signal | GitHub endpoint | Green | Amber | Red |
+|---|---|---|---|---|
+| Liveness | `GET /repos/{o}/{r}` + commits | latest commit ≤ 6 mo | 6–12 mo | none in 12 mo, or archived |
+| Bus factor | `GET /repos/{o}/{r}/commits?since=<12mo>&per_page=100` | top human author < 50% (bots and merge commits excluded) | 50–80%; < 10 human commits (`insufficient_data`) | > 80% |
+| Responsiveness | `GET /repos/{o}/{r}/issues?state=closed&since=<90d>&per_page=100` | median close ≤ 30 d | 30–90 d; < 3 closed or issues disabled (`insufficient_data`) | > 90 d; 0 closed with open issues (issues enabled) |
+| Releases | `GET /repos/{o}/{r}/releases?per_page=10` | newest published non-draft ≤ 6 mo | 6–18 mo; none (`insufficient_data`) | > 18 mo |
+| License | `license.spdx_id` from repo | permissive list (MIT, Apache-2.0, BSD-2/3, ISC, 0BSD, Unlicense, Zlib) | copyleft, NOASSERTION, unlisted → "check with legal" | none ("GitHub found no license file") |
 
-Verdict = traffic light (low / medium / high risk), not a number.
-Archived or no license → high; otherwise count red/amber signals.
+Pull requests and issues closed as duplicates are excluded from responsiveness.
+
+Verdict = traffic light (low / medium / high risk), not a number (D-81):
+- **high** = archived, liveness red, license red, or ≥ 2 red signals
+- **medium** = exactly 1 red, or ≥ 2 amber, not counting an amber license or `insufficient_data` ambers
+- **low** = anything else
+
+The verdict reason names each cause once. "High" means you'd maintain it yourself,
+except no license: you may have no right to use it.
 Stars/forks are context only. Do NOT use `/stats/contributors` (returns 202 while computing).
 All thresholds live in one file: `backend/analysis/thresholds.py`.
 
