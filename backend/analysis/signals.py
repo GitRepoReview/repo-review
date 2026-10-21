@@ -233,6 +233,19 @@ NO_LICENSE = (
 )
 
 
+SIGNAL_NAMES = {
+    "liveness": "Last commit",
+    "bus_factor": "One author",
+    "responsiveness": "Issue response",
+    "releases": "Releases",
+    "license": "License",
+}
+
+
+def _names(ids: list[str]) -> str:
+    return ", ".join(SIGNAL_NAMES[i] for i in ids)
+
+
 def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
     """Traffic light from signal statuses; the reason names every cause once.
 
@@ -254,13 +267,13 @@ def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
     else:
         level = Risk.LOW
 
-    causes = []
+    sentences = []
     if archived:
-        causes.append(ARCHIVED)
+        sentences.append(ARCHIVED)
     if stalled:
-        causes.append(STALLED)
+        sentences.append(STALLED)
     if no_license:
-        causes.append(NO_LICENSE)
+        sentences.append(NO_LICENSE)
     named = []
     if archived or stalled:
         named.append("liveness")
@@ -268,14 +281,15 @@ def verdict(signals: list[SignalResult], archived: bool) -> Verdict:
         named.append("license")
     other_reds = [i for i in reds if i not in named]
     if other_reds:
-        label = "also red" if causes else "red signals"
-        causes.append(f"{label}: {', '.join(other_reds)}")
+        label = "also red" if sentences else "red signals"
+        sentences.append(f"{label}: {_names(other_reds)}")
     if level is Risk.MEDIUM and len(counted) >= t.VERDICT_MEDIUM_AMBER_COUNT:
-        causes.append(f"amber signals: {', '.join(counted)}")
+        sentences.append(f"amber signals: {_names(counted)}")
     if level is Risk.LOW and len(counted) == 1:
-        causes.append(f"only {counted[0]} is a minor concern")
-
-    notes = ["check the license"] if "license" in ambers else []
-    notes += [f"not enough data for {i}" for i in unsure]
-    parts = causes + notes or ["every signal is healthy"]
-    return Verdict(level, f"{level.value.capitalize()} risk: {'; '.join(parts)}.")
+        sentences.append(f"only {SIGNAL_NAMES[counted[0]]} is a minor concern")
+    if "license" in ambers:
+        sentences.append("check the license")
+    if unsure:
+        sentences.append(f"not enough data for {_names(unsure)}")
+    sentences = sentences or ["every signal is healthy"]
+    return Verdict(level, " ".join(f"{x[0].upper()}{x[1:]}." for x in sentences))

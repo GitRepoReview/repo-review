@@ -1,1 +1,110 @@
 @import "tailwindcss";
+
+@theme {
+	--color-paper: #f6f7f9;
+	--color-surface: #ffffff;
+	--color-ink: #1d2733;
+	--color-muted: #5b6676;
+	--color-rule: #d5dae1;
+	--color-ok: #2e7d5b;
+	--color-watch: #b7791f;
+	--color-risk: #b3261e;
+	--color-unknown: #8a94a3;
+	--color-accent: #1f4fbf;
+	--color-accent-dark: #1c49af;
+
+	--font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+	--text-h1: 2rem;
+	--text-h1--line-height: 1.2;
+	--text-h2: 1.25rem;
+	--text-h2--line-height: 1.4;
+	--text-body: 1rem;
+	--text-body--line-height: 1.5;
+	--text-small: 0.875rem;
+	--text-small--line-height: 1.5;
+}
+
+@layer base {
+	/* The sticky report bar is 56px (+1px rule) at 375px, 64px (+1px) from 640px. */
+	html {
+		scroll-padding-top: 57px;
+	}
+	@media (min-width: 640px) {
+		html {
+			scroll-padding-top: 65px;
+		}
+	}
+
+	body {
+		background: var(--color-paper);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+		font-variant-numeric: tabular-nums;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--color-ink);
+		outline-offset: 2px;
+	}
+}
+
+/* Verdict panel tone: the only gradient on the page. */
+.tone-ok {
+	--tone: var(--color-ok);
+}
+.tone-watch {
+	--tone: var(--color-watch);
+}
+.tone-risk {
+	--tone: var(--color-risk);
+}
+.verdict-panel {
+	border-top: 3px solid var(--tone);
+	background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--tone) 6%, var(--color-surface)) 0%,
+		var(--color-surface) 65%
+	);
+}
+
+@keyframes seg-grow {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@keyframes seg-wait {
+	0%,
+	30% {
+		fill: var(--color-muted);
+	}
+	34%,
+	100% {
+		fill: var(--color-rule);
+	}
+}
+
+.seg-grow {
+	transform-box: fill-box;
+	transform-origin: left center;
+	animation: seg-grow 180ms ease-out both;
+}
+
+.seg-wait {
+	fill: var(--color-rule);
+	animation: seg-wait 900ms steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.seg-grow {
+		animation: none;
+	}
+	.seg-wait {
+		animation: none;
+	}
+}

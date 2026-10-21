@@ -1,7 +1,300 @@
-export default function App() {
+import {
+	type FormEvent,
+	type MouseEvent,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { type Failure, fetchReport, parseRepo, type Repo } from "./api";
+import { localTime } from "./format";
+import { LEVELS, Report, Waiting } from "./Report";
+import type { Report as ReportData } from "./types";
+
+const WAIT_MS = 250;
+const SITE = "RepoReview";
+
+const EXAMPLES = ["pallets/flask", "request/request", "sindresorhus/p-map"];
+
+type State =
+	| { kind: "idle" }
+	| { kind: "report"; report: ReportData }
+	| { kind: "error"; failure: Failure; repo: Repo | null };
+
+function Examples({ onPick }: { onPick: (slug: string) => void }) {
 	return (
-		<main className="mx-auto max-w-2xl p-8">
-			<h1 className="text-2xl font-semibold">RepoReview</h1>
-		</main>
+		<p className="flex flex-wrap items-baseline justify-center gap-x-4 gap-y-1 text-small text-muted">
+			Try:
+			{EXAMPLES.map((slug) => (
+				<button
+					key={slug}
+					type="button"
+					onClick={() => onPick(slug)}
+					className="cursor-pointer rounded-[4px] underline underline-offset-2 hover:text-accent"
+				>
+					{slug}
+				</button>
+			))}
+		</p>
+	);
+}
+
+function errorMessage({ code, resetAt }: Failure, repo: Repo | null): string {
+	const slug = repo ? `${repo.owner}/${repo.repo}` : "that name";
+	switch (code) {
+		case "invalid_repo":
+			return "That doesn't look like owner/repo or a GitHub link.";
+		case "not_found":
+			return `No public repository at ${slug}. Check the spelling.`;
+		case "empty_repo":
+			return "This repository has no commits yet, so there's nothing to judge.";
+		case "rate_limited": {
+			const time = resetAt ? localTime(resetAt) : null;
+			return `This server has used its GitHub requests for the hour. Try again${time ? ` after ${time}` : ""}, or open a repo that's already cached.`;
+		}
+		case "upstream_error":
+			return "GitHub didn't respond. Try again in a minute.";
+		default:
+			return "Something went wrong. Try again in a minute.";
+	}
+}
+
+function repoParam(): string | null {
+	return new URLSearchParams(location.search).get("repo");
+}
+
+// /?repo=owner/repo — a query parameter, so the server only ever serves "/".
+function repoUrl(text: string): string {
+	return `/?repo=${encodeURIComponent(text).replaceAll("%2F", "/")}`;
+}
+
+function navigate(url: string) {
+	if (url !== location.pathname + location.search) {
+		history.pushState(null, "", url);
+	}
+}
+
+function pageTitle(
+	state: State,
+	pending: Repo | null,
+	waiting: boolean,
+): string {
+	if (pending && waiting) {
+		return `Reviewing ${pending.owner}/${pending.repo}… | ${SITE}`;
+	}
+	switch (state.kind) {
+		case "report":
+			return `${state.report.repo}: ${LEVELS[state.report.verdict.level].word} | ${SITE}`;
+		case "error":
+			return state.failure.code === "not_found" && state.repo
+				? `${state.repo.owner}/${state.repo.repo}: not found | ${SITE}`
+				: `Error | ${SITE}`;
+		default:
+			return SITE;
+	}
+}
+
+export default function App() {
+	const [input, setInput] = useState("");
+	const [state, setState] = useState<State>({ kind: "idle" });
+	// The repo being fetched; `waiting` flips on only if it takes > WAIT_MS,
+	// so cached answers replace the old result without a flash of panel.
+	const [pending, setPending] = useState<Repo | null>(null);
+	const [waiting, setWaiting] = useState(false);
+	const loading = pending !== null;
+	// Once a report has been shown the hero shrinks to a bar and stays one,
+	// so errors and re-checks don't make the page jump back and forth.
+	const [compact, setCompact] = useState(false);
+	// Only the latest request may touch the screen (Back/Forward can overtake).
+	const latest = useRef(0);
+	const started = useRef(false);
+
+	const reset = useCallback(() => {
+		latest.current++;
+		setInput("");
+		setPending(null);
+		setWaiting(false);
+		setCompact(false);
+		setState({ kind: "idle" });
+	}, []);
+
+	const load = useCallback(async (text: string, push: boolean) => {
+		const id = ++latest.current;
+		const repo = parseRepo(text);
+		const slug = repo ? `${repo.owner}/${repo.repo}` : text.trim();
+		if (push) navigate(repoUrl(slug));
+		setInput(slug);
+		setWaiting(false);
+		if (!repo) {
+			setPending(null);
+			setState({
+				kind: "error",
+				failure: { code: "invalid_repo" },
+				repo: null,
+			});
+			return;
+		}
+		setPending(repo);
+		const timer = setTimeout(() => {
+			if (id === latest.current) setWaiting(true);
+		}, WAIT_MS);
+		let next: State;
+		try {
+			next = { kind: "report", report: await fetchReport(repo) };
+		} catch (failure) {
+			next = { kind: "error", failure: failure as Failure, repo };
+		}
+		clearTimeout(timer);
+		if (id !== latest.current) return;
+		setState(next);
+		if (next.kind === "report") setCompact(true);
+		setWaiting(false);
+		setPending(null);
+	}, []);
+
+	useEffect(() => {
+		const onPop = () => {
+			const param = repoParam();
+			if (param) load(param, false);
+			else reset();
+		};
+		window.addEventListener("popstate", onPop);
+		return () => window.removeEventListener("popstate", onPop);
+	}, [load, reset]);
+
+	// Opened on /?repo=…: run it once (a ref survives StrictMode's double effect).
+	useEffect(() => {
+		if (started.current) return;
+		started.current = true;
+		const text = repoParam();
+		if (text) load(text, false);
+	}, [load]);
+
+	useEffect(() => {
+		document.title = pageTitle(state, pending, waiting);
+	}, [state, pending, waiting]);
+
+	function onSubmit(e: FormEvent) {
+		e.preventDefault();
+		if (!loading) load(input, true);
+	}
+
+	function pick(slug: string) {
+		if (!loading) load(slug, true);
+	}
+
+	function home(e: MouseEvent<HTMLAnchorElement>) {
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+			return;
+		}
+		e.preventDefault();
+		navigate("/");
+		reset();
+	}
+
+	const hideIdle = !(pending && waiting);
+	// Empty state: nothing asked yet, so the hero fills the screen.
+	const bare = !compact && state.kind === "idle" && !pending;
+	return (
+		<>
+			<header
+				className={`border-b border-rule bg-surface ${compact ? "sticky top-0 z-10" : ""}`}
+			>
+				<div
+					className={`mx-auto max-w-[760px] px-4 ${
+						compact
+							? "flex items-center justify-between gap-4 py-1.5 sm:py-2.5"
+							: `flex flex-col items-center py-10 text-center md:py-16 ${
+									bare ? "min-h-[75vh] justify-center md:min-h-[85vh]" : ""
+								}`
+					}`}
+				>
+					<p
+						className={`font-semibold text-accent ${compact ? "max-sm:sr-only" : ""}`}
+					>
+						<a href="/" onClick={home} className="hover:underline">
+							{SITE}
+						</a>
+					</p>
+					<h1
+						className={
+							compact
+								? "sr-only"
+								: "mt-6 max-w-[30ch] text-balance text-[34px] leading-[1.2] font-semibold text-ink md:text-[48px]"
+						}
+					>
+						Will we regret depending on this?
+					</h1>
+					{!compact && (
+						<p className="mt-3 text-[18px] text-muted">
+							Checks who will maintain an open-source dependency two years from
+							now.
+						</p>
+					)}
+					<form
+						onSubmit={onSubmit}
+						className={`flex w-full items-center rounded-[10px] border border-unknown bg-surface focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgba(31,79,191,0.15)] ${
+							compact
+								? "h-11 pr-1 sm:w-[420px]"
+								: "mt-8 h-16 max-w-[680px] pr-2"
+						}`}
+					>
+						<label htmlFor="repo" className="sr-only">
+							GitHub repository, as owner/repo or a link
+						</label>
+						<input
+							id="repo"
+							value={input}
+							onChange={(e) => setInput(e.target.value)}
+							placeholder="owner/repo or GitHub link"
+							autoComplete="off"
+							spellCheck={false}
+							autoCapitalize="off"
+							className={`h-full min-w-0 flex-1 bg-transparent text-ink placeholder:text-unknown focus-visible:outline-none ${compact ? "pl-3 text-body" : "pl-5 text-body md:text-[18px]"}`}
+						/>
+						<button
+							type="submit"
+							disabled={loading}
+							className={`shrink-0 cursor-pointer rounded-[6px] bg-accent px-4 text-body font-semibold text-surface hover:bg-accent-dark disabled:cursor-default disabled:opacity-60 ${compact ? "h-9" : "h-12"}`}
+						>
+							{loading ? "Reviewing…" : "Review"}
+						</button>
+					</form>
+					{!compact && (
+						<>
+							<div
+								aria-hidden="true"
+								className="mt-2 flex h-[3px] w-full max-w-[680px] gap-1"
+							>
+								<span className="flex-1 rounded-[2px] bg-ok" />
+								<span className="flex-1 rounded-[2px] bg-watch" />
+								<span className="flex-1 rounded-[2px] bg-risk" />
+							</div>
+							<div className="mt-4">
+								<Examples onPick={pick} />
+							</div>
+						</>
+					)}
+				</div>
+			</header>
+			<main className="mx-auto max-w-[760px] px-4 pt-8 pb-12">
+				<div aria-live="polite">
+					{pending && waiting && <Waiting repo={pending} />}
+					{hideIdle && state.kind === "error" && (
+						<p className="max-w-[75ch]">
+							{errorMessage(state.failure, state.repo)}
+						</p>
+					)}
+					{hideIdle && state.kind === "report" && (
+						<div>
+							<Report
+								key={`${state.report.repo}@${state.report.meta.fetched_at}`}
+								report={state.report}
+							/>
+						</div>
+					)}
+				</div>
+			</main>
+		</>
 	);
 }
