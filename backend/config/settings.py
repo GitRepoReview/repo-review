@@ -2,10 +2,27 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# The SQLite file (DB and report cache) lives here; in the image it is a mounted volume.
+DATA_DIR = Path(os.environ.get("DJANGO_DATA_DIR", BASE_DIR))
 
 DEBUG = os.environ.get("DJANGO_DEBUG") == "1"
 SECRET_KEY = "dev-only-insecure-key" if DEBUG else os.environ["DJANGO_SECRET_KEY"]
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*" if DEBUG else "").split(",")
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*" if DEBUG else "").split(",")
+    if h.strip()
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+]
+
+# The built SPA is served by WhiteNoise from the site root; Django only handles /api/.
+FRONTEND_DIST = os.environ.get("DJANGO_FRONTEND_DIST")
+if FRONTEND_DIST:
+    WHITENOISE_ROOT = FRONTEND_DIST
+    WHITENOISE_INDEX_FILE = True
 
 INSTALLED_APPS = ["analysis"]
 ROOT_URLCONF = "config.urls"
@@ -15,7 +32,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": DATA_DIR / "db.sqlite3",
     }
 }
 
