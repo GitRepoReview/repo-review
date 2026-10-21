@@ -87,6 +87,10 @@ def test_uncached_report_calls_github_and_returns_the_contract(client, github):
         "pushed_at",
         "archived",
         "description",
+        "watchers",
+        "open_issues",
+        "html_url",
+        "homepage",
     }
     assert body["meta"] == {
         "cached": False,

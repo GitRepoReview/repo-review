@@ -70,6 +70,10 @@ def build_report(
             "pushed_at": repo["pushed_at"],
             "archived": repo["archived"],
             "description": repo["description"],
+            "watchers": repo["subscribers_count"],
+            "open_issues": repo["open_issues_count"],
+            "html_url": repo["html_url"],
+            "homepage": repo["homepage"] or None,
         },
         "meta": {
             "cached": cached,

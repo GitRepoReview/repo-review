@@ -28,15 +28,16 @@ export function localTime(iso: string): string | null {
 	}).format(date);
 }
 
-export function day(iso: string): string {
+export function compact(n: number): string {
+	return new Intl.NumberFormat("en", {
+		notation: "compact",
+		maximumFractionDigits: 1,
+	}).format(n);
+}
+
+export function monthYear(iso: string): string {
 	return new Intl.DateTimeFormat("en-GB", {
-		day: "numeric",
 		month: "short",
 		year: "numeric",
 	}).format(new Date(iso));
-}
-
-export function count(n: number, noun: string): string {
-	const num = new Intl.NumberFormat("en").format(n);
-	return `${num} ${noun}${n === 1 ? "" : "s"}`;
 }

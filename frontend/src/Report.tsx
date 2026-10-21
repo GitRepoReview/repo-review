@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import type { Repo } from "./api";
-import { age, count, day } from "./format";
+import { age, compact, monthYear } from "./format";
 import { SignalIcon } from "./icons";
 import type { Level, Report as ReportData, Signal, SignalId } from "./types";
 
@@ -182,23 +182,28 @@ function Tile({
 	);
 	return (
 		<section
-			className={`rounded-[4px] border border-rule bg-surface p-4 ${wide ? "md:col-span-2" : ""}`}
+			className={`min-w-0 rounded-[4px] border border-rule bg-surface p-4 mb-4 [overflow-wrap:anywhere] ${wide ? "md:col-span-2" : "md:row-span-5 md:grid md:grid-rows-subgrid"}`}
 		>
 			<h3 className="flex items-center gap-2 text-body font-semibold">
 				<SignalIcon id={signal.id} />
 				{NAMES[signal.id]}
 			</h3>
-			<div
-				className={
-					wide
-						? "mt-3 flex flex-wrap items-center gap-x-6 gap-y-1"
-						: "mt-3 space-y-1"
-				}
-			>
-				{value && <p className="text-h2 font-semibold">{value}</p>}
-				{status}
-				<p className="max-w-[75ch]">{signal.summary}</p>
-			</div>
+			{wide ? (
+				<div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1">
+					{status}
+					<p className="max-w-[75ch]">{signal.summary}</p>
+				</div>
+			) : (
+				<>
+					<p
+						className={`mt-3 text-h2 font-semibold ${value ? "" : "hidden md:block"}`}
+					>
+						{value}
+					</p>
+					<div className="mt-1">{status}</div>
+					<p className="mt-1 max-w-[75ch]">{signal.summary}</p>
+				</>
+			)}
 			<details className="mt-3 text-small">
 				<summary className="w-fit cursor-pointer rounded-[4px] text-muted">
 					Show evidence
@@ -207,7 +212,9 @@ function Tile({
 					{Object.entries(signal.evidence).map(([key, value]) => (
 						<div key={key} className="contents">
 							<dt className="text-muted">{key}</dt>
-							<dd className="break-words">{show(value)}</dd>
+							<dd className="min-w-0 [overflow-wrap:anywhere]">
+								{show(value)}
+							</dd>
 						</div>
 					))}
 				</dl>
@@ -225,17 +232,52 @@ function freshness({ meta }: ReportData): string {
 		: base;
 }
 
-function contextLine({ context: c }: ReportData): string {
-	return [
-		count(c.stars, "star"),
-		count(c.forks, "fork"),
-		c.language,
-		`created ${day(c.created_at)}`,
-		c.archived ? "archived" : "not archived",
-	]
-		.filter(Boolean)
-		.join(", ")
-		.concat(".");
+function ReportHeader({ repo, context: c }: ReportData) {
+	const facts: [string, string][] = [
+		["Stars", compact(c.stars)],
+		["Forks", compact(c.forks)],
+		["Watching", compact(c.watchers)],
+		["Open issues & PRs", compact(c.open_issues)],
+		["Language", c.language ?? "—"],
+		["Created", monthYear(c.created_at)],
+		["Last push", `${age(c.pushed_at)} ago`],
+	];
+	const link = "underline underline-offset-2 [overflow-wrap:anywhere]";
+	return (
+		<div className="mb-4">
+			<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+				<h2 className="min-w-0 font-mono text-h2 text-ink break-all">{repo}</h2>
+				<p className="flex gap-x-4 text-small">
+					<a href={c.html_url} className={link}>
+						View on GitHub
+					</a>
+					{c.homepage && (
+						<a href={c.homepage} className={link}>
+							Homepage
+						</a>
+					)}
+				</p>
+			</div>
+			{c.description && (
+				<p className="mt-1 max-w-[75ch] text-body text-muted [overflow-wrap:anywhere]">
+					{c.description}
+				</p>
+			)}
+			<dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-3 sm:flex sm:flex-wrap">
+				{facts.map(([label, value]) => (
+					<div key={label} className="min-w-0">
+						<dt className="text-[13px] text-muted">{label}</dt>
+						<dd className="font-semibold tabular-nums [overflow-wrap:anywhere]">
+							{value}
+						</dd>
+					</div>
+				))}
+			</dl>
+			<p className="mt-3 text-[13px] text-muted">
+				Popularity isn't part of the verdict.
+			</p>
+		</div>
+	);
 }
 
 const ORDER = Object.keys(NAMES);
@@ -298,12 +340,12 @@ export function Report({ report }: { report: ReportData }) {
 					because the hourly GitHub limit is used up.
 				</p>
 			)}
+			<ReportHeader {...report} />
 			<header
 				className={`${PANEL} verdict-panel ${TONES[report.verdict.level]}`}
 			>
-				<p className="font-mono text-body break-all">{report.repo}</p>
 				<h2
-					className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-h1 font-semibold ${level.text}`}
+					className={`flex flex-wrap items-center gap-x-4 gap-y-2 text-h1 font-semibold ${level.text}`}
 				>
 					{level.word}
 					<Meter
@@ -315,7 +357,7 @@ export function Report({ report }: { report: ReportData }) {
 				<p className="mt-2 max-w-[75ch] text-h2">{report.verdict.reason}</p>
 				<p className="mt-2 text-small text-muted">{freshness(report)}</p>
 			</header>
-			<div className="mt-6 grid gap-4 md:grid-cols-2">
+			<div className="mt-6 grid grid-cols-1 gap-x-4 md:grid-cols-2">
 				{signals.map((s, i) => (
 					<Tile
 						key={s.id}
@@ -325,7 +367,6 @@ export function Report({ report }: { report: ReportData }) {
 					/>
 				))}
 			</div>
-			<p className="mt-6 text-small text-muted">{contextLine(report)}</p>
 			<section className="mt-10 max-w-[75ch]">
 				<h2 className="text-h2 font-semibold">How we judge this</h2>
 				<p className="mt-2">

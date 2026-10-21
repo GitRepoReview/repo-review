@@ -28,6 +28,10 @@ export type Report = {
 		pushed_at: string;
 		archived: boolean;
 		description: string | null;
+		watchers: number;
+		open_issues: number;
+		html_url: string;
+		homepage: string | null;
 	};
 	meta: {
 		cached: boolean;

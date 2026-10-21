@@ -54,8 +54,13 @@ The meter has `role="img"` and an `aria-label` equal to the status word.
 Paste a GitHub repository to see whether anyone will keep maintaining it.   <- empty state only
 Try: pallets/flask   request/request   sindresorhus/p-map                    <- empty state only
 
-GitRepoReview/repo-review                                   <- Plex Mono 16
-High risk                                                   <- 32/600, level colour
+GitRepoReview/repo-review              View on GitHub  Homepage   <- report header, no border/background:
+A small tool that checks maintenance.                                  Plex Mono 20 ink; links 14 underlined
+Stars  Forks  Watching  Open issues & PRs  Language  Created  Last push  <- label 13 muted over value 16/600
+2.1K   180    40        12                 Python    Mar 2024 3 days ago    wraps; 2 columns at 375px
+Popularity isn't part of the verdict.                                   <- 13 muted
+                                                                        16px gap
+High risk ■■■                                               <- verdict panel: 32/600, level colour
 GitHub found no license file — you may have no right to use it; check manually.
 Also red: One author. Not enough data for Issue response, Releases.   <- verdict.reason, 20/400
 Checked 20 minutes ago, from cache.                         <- 14 muted
@@ -73,8 +78,6 @@ Checked 20 minutes ago, from cache.                         <- 14 muted
 │ ■■■ Risk    GitHub found no license file                         │  <- spans both columns:
 └──────────────────────────────────────────────────────────────────┘     a legal question, not maintenance (D-60)
 
-0 stars, 0 forks, Python, created 21 Oct 2026, not archived.     <- 14 muted, one line
-
 How we judge this
 Five signals answer one question: will someone still maintain this in two years?
 The thresholds are heuristics we chose, not research. Read them, or disagree, in thresholds.py.  <- link to the repo file
@@ -82,6 +85,16 @@ The thresholds are heuristics we chose, not research. Read them, or disagree, in
 Grid: two columns from 640px, one column below. Tile order fixed: Last commit, One author,
 Issue response, Releases, License (full width). Tile body = `summary` from the API as-is.
 "Show evidence" = native `<details>` with a `<dl>` of evidence keys and values, keys as-is.
+
+## Revisions after screenshot review
+- Tiles are equal height per row. From 640px each tile is a CSS subgrid spanning five rows
+  (title · key value · meter and status · summary · evidence), so statuses and summaries of
+  neighbours line up; an empty key value keeps its row. License is outside the subgrid.
+  Below 640px: one column, no subgrid.
+- Repo context moved into a borderless report header above the verdict panel: identifier, links,
+  description, seven facts, and a one-line note that popularity is not part of the verdict.
+  The verdict panel keeps only level, reason and freshness. The separate "About this repo" block
+  and the one-line context string are gone.
 
 ## Icons (5, own inline SVG)
 Monochrome, `currentColor` = muted, 1.5px stroke, 20px, `aria-hidden="true"`, no fill colours, no library.
@@ -124,5 +137,5 @@ one word of a headline accented in another colour.
 
 ## Build order (time-box ~40 min)
 1. Form, all states, verdict block, tiles with meter and evidence. Shippable on its own.
-2. "How we judge this" block and context line.
+2. "How we judge this" block and report header.
 3. Icons — only if 1–2 are done.
