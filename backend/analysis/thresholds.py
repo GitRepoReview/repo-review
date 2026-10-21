@@ -43,3 +43,12 @@ UNCLEAR_LICENSE = "NOASSERTION"
 # Verdict: red / amber counts that move the traffic light.
 VERDICT_HIGH_RED_COUNT = 2
 VERDICT_MEDIUM_AMBER_COUNT = 2
+
+# Bus factor reads commits from this many days back.
+BUS_FACTOR_WINDOW_DAYS = 365
+
+# Rate limit and cache (see CLAUDE.md "Rate limit").
+MIN_REQUESTS_REMAINING = 4  # fewer left: do not start an analysis
+REPORT_FRESH_HOURS = 24  # younger than this, served without asking GitHub
+REPORT_KEEP_DAYS = 30  # cache entry timeout; stale data must stay readable
+MISSING_CACHE_HOURS = 1  # repos that are not found or empty

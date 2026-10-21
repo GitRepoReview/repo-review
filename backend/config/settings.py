@@ -20,3 +20,12 @@ DATABASES = {
 }
 
 USE_TZ = True
+
+# Reports are cached in a table of the same SQLite file. Create it with
+# `manage.py createcachetable` (compose does this at startup).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "report_cache",
+    }
+}
